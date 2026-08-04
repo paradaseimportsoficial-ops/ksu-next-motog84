@@ -19,13 +19,10 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
 
-      - name: Integrate KernelSU Next via Git
+      - name: Integrate KernelSU Next
         run: |
           cd kernel_src
-          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git KernelSU-Next
-          cd KernelSU-Next
-          bash kernel/setup.sh next
-          cd ..
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
 
       - name: Generate Defconfig & Build Kernel
         run: |
