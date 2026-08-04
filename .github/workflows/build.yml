@@ -16,12 +16,10 @@ jobs:
           sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev curl gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3 python3-pip
           pip3 install mkbootimg --break-system-packages || true
 
-      - name: Setup Android Clang Toolchain (AOSP)
+      - name: Setup Android Clang Toolchain
         run: |
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+/refs/heads/main/clang-r416183b clang || git clone --depth=1 https://github.com/llvm/llvm-project.git -b release/12.x clang-llvm
-          if [ -d "clang/bin" ]; then
-            echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
-          fi
+          git clone --depth=1 https://gitlab.com/relink/clang-r416183b.git clang
+          echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
 
       - name: Clone Motorola Kernel Source
         run: |
@@ -30,12 +28,8 @@ jobs:
       - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          mkdir -p drivers/kernelsu
-          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git KSU_TEMP
-          cp -r KSU_TEMP/kernel/* drivers/kernelsu/
-          rm -rf KSU_TEMP
-          grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
-          grep -q "kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s next
+          
 
       - name: Build Kernel Image
         run: |
@@ -52,9 +46,9 @@ jobs:
           # Habilitar KernelSU Next
           echo "CONFIG_KSU=y" >> out/.config
           
-          # Compilar
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- Image.gz || make -j$(nproc) O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- Image
+          # Compilar com Clang oficial Android
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image.gz || make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image
 
       - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
