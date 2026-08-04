@@ -13,7 +13,7 @@ jobs:
       - name: Setup Build Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev curl
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev curl gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
       - name: Clone Motorola Kernel Source
         run: |
@@ -29,15 +29,17 @@ jobs:
           grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
           grep -q "kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
 
-      - name: Merge Configs & Build Kernel
+      - name: Merge Configs & Build Kernel Image
         run: |
           cd kernel_src
           export ARCH=arm64
           export SUBARCH=arm64
+          export CC=clang
+          export CROSS_COMPILE=aarch64-linux-gnu-
           
           mkdir -p out
           
-          # Tenta realizar o merge das configs do modelo bangkk/holi
+          # Realiza o merge das configurações específicas do Moto G84 / Qualcomm Holi
           if [ -f "arch/arm64/configs/vendor/holi-perf_defconfig" ]; then
             ARCH=arm64 ./scripts/kconfig/merge_config.sh -O out arch/arm64/configs/vendor/holi-perf_defconfig arch/arm64/configs/vendor/bangkk.config || true
           elif [ -f "arch/arm64/configs/vendor/holi_defconfig" ]; then
@@ -46,15 +48,17 @@ jobs:
             make O=out defconfig
           fi
           
-          # Habilita o KernelSU
+          # Ativa o KernelSU Next na configuração
           echo "CONFIG_KSU=y" >> out/.config
           make O=out olddefconfig
           
-          # Compila o Kernel
-          make -j$(nproc) O=out
+          # Compila focando apenas na Imagem do Kernel (Image.gz)
+          make -j$(nproc) O=out Image.gz || make -j$(nproc) O=out Image
 
-      - name: Upload boot.img Artifact
+      - name: Upload Kernel Image Artifact
         uses: actions/upload-artifact@v4
         with:
           name: MotoG84-KernelSU-Next
-          path: kernel_src/out/arch/arm64/boot/boot.img
+          path: |
+            kernel_src/out/arch/arm64/boot/Image.gz
+            kernel_src/out/arch/arm64/boot/Image
