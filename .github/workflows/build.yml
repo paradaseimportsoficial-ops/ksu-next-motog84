@@ -26,7 +26,7 @@ jobs:
           # Executa o script oficial de integracao do KernelSU-Next
           curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh | bash -s next
 
-      - name: Build Kernel Image
+      - name: Build Kernel Image & DTB
         run: |
           cd kernel_src
           mkdir -p out
@@ -43,14 +43,23 @@ jobs:
           echo "CONFIG_KSU_NEXT=y" >> out/.config
           echo "CONFIG_OVERLAY_FS=y" >> out/.config
           
-          # Compilar
+          # Compilar o Kernel e gerar as DTBs nativas
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image.gz || make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image.gz dtbs || make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image dtbs
+
+          # Concatena a Image compactada com os arquivos DTB compilados da Qualcomm/Motorola
+          if [ -d "out/arch/arm64/boot/dts/vendor/qcom" ]; then
+            cat out/arch/arm64/boot/Image.gz out/arch/arm64/boot/dts/vendor/qcom/*.dtb > out/arch/arm64/boot/Image.gz-dtb || cat out/arch/arm64/boot/Image out/arch/arm64/boot/dts/vendor/qcom/*.dtb > out/arch/arm64/boot/Image-dtb
+          elif [ -d "out/arch/arm64/boot/dts/qcom" ]; then
+            cat out/arch/arm64/boot/Image.gz out/arch/arm64/boot/dts/qcom/*.dtb > out/arch/arm64/boot/Image.gz-dtb || cat out/arch/arm64/boot/Image out/arch/arm64/boot/dts/qcom/*.dtb > out/arch/arm64/boot/Image-dtb
+          fi
 
       - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: MotoG84-KernelSU-Next-Kernel
           path: |
+            kernel_src/out/arch/arm64/boot/Image.gz-dtb
+            kernel_src/out/arch/arm64/boot/Image-dtb
             kernel_src/out/arch/arm64/boot/Image.gz
             kernel_src/out/arch/arm64/boot/Image
