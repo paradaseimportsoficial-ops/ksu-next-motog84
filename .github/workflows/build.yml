@@ -29,19 +29,20 @@ jobs:
           grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
           grep -q "kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
 
-      - name: Generate Defconfig & Build Kernel
+      - name: Auto-Detect Defconfig & Build Kernel
         run: |
           cd kernel_src
           export ARCH=arm64
           export SUBARCH=arm64
           
-          # Cria uma configuração padrao base funcional para ARM64 Snapdragon
-          make O=out defconfig
+          # Busca automaticamente a defconfig valida no repositorio da Motorola
+          CONF=$(find arch/arm64/configs -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
+          echo "Defconfig encontrada: $CONF"
           
-          # Habilita o suporte ao KernelSU
+          make O=out $CONF
+          
+          # Habilita o KernelSU
           echo "CONFIG_KSU=y" >> out/.config
-          
-          # Atualiza e valida a configuracao
           make O=out olddefconfig
           
           # Compila o Kernel
@@ -50,3 +51,5 @@ jobs:
       - name: Upload boot.img Artifact
         uses: actions/upload-artifact@v3
         with:
+          name: MotoG84-KernelSU-Next
+          path: kernel_src/out/arch/arm64/boot/boot.img
