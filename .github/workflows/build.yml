@@ -1,0 +1,40 @@
+name: Build KernelSU Next Spoofed - Moto G84
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Build Environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang
+
+      - name: Clone Motorola Kernel Source (Moto G84)
+        run: |
+          git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git -b moto-penang-5.4 kernel_src
+          cd kernel_src
+
+      - name: Integrate KernelSU Next Spoofed (v3.3.0.13)
+        run: |
+          cd kernel_src
+          curl -LSs "https://raw.githubusercontent.com/rifs3/KernelSU-Next-Spoofed/v3.3.0.13/kernel/setup.sh" | bash -s v3.3.0.13
+
+      - name: Build Kernel Image
+        run: |
+          cd kernel_src
+          export ARCH=arm64
+          export SUBARCH=arm64
+          make O=out vendor/penang_defconfig
+          make -j$(nproc) O=out
+
+      - name: Upload boot.img Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: MotoG84-KernelSU-Next-Spoofed
+          path: kernel_src/out/arch/arm64/boot/boot.img
