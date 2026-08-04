@@ -38,8 +38,10 @@ jobs:
             make O=out ARCH=arm64 gki_defconfig || make O=out ARCH=arm64 defconfig
           fi
           
-          # Habilitar KernelSU Next
+          # Habilitar KernelSU Next e dependencias obrigatorias
           echo "CONFIG_KSU=y" >> out/.config
+          echo "CONFIG_KSU_NEXT=y" >> out/.config
+          echo "CONFIG_OVERLAY_FS=y" >> out/.config
           
           # Compilar
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
