@@ -22,16 +22,17 @@ jobs:
       - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          # Baixa o pacote fonte do KernelSU-Next diretamente via tarball
-          wget -O ksu.tar.gz https://github.com/rifs2023/KernelSU-Next/archive/refs/heads/next.tar.gz
+          # Tenta baixar da branch main ou master do KernelSU-Next
+          wget -O ksu.tar.gz https://github.com/rifs2023/KernelSU-Next/archive/refs/heads/main.tar.gz || wget -O ksu.tar.gz https://github.com/rifs2023/KernelSU-Next/archive/refs/heads/master.tar.gz
+          
           mkdir -p KernelSU-Next-Source
           tar -xzf ksu.tar.gz -C KernelSU-Next-Source --strip-components=1
           
-          # Copia os drivers para dentro do kernel da Motorola
+          # Copia os drivers para dentro da arvore do kernel
           mkdir -p drivers/kernelsu
           cp -r KernelSU-Next-Source/kernel/* drivers/kernelsu/
           
-          # Injeta a referência do KernelSU no Makefile e Kconfig dos drivers
+          # Injeta a referencia no Makefile e Kconfig
           grep -q "obj-\$(CONFIG_KSU) += kernelsu/" drivers/Makefile || echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
           grep -q 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
 
