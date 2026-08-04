@@ -13,9 +13,9 @@ jobs:
       - name: Setup Build Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev
 
-      - name: Clone Motorola Kernel Source (Moto G84 - bangkk)
+      - name: Clone Motorola Kernel Source
         run: |
           git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git -b MMI-U1TCS34.22-64-18-3 kernel_src || git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
           cd kernel_src
@@ -25,12 +25,23 @@ jobs:
           cd kernel_src
           curl -LSs "https://raw.githubusercontent.com/rifs3/KernelSU-Next-Spoofed/v3.3.0.13/kernel/setup.sh" | bash -s v3.3.0.13
 
-      - name: Build Kernel Image
+      - name: Generate Defconfig & Build Kernel
         run: |
           cd kernel_src
           export ARCH=arm64
           export SUBARCH=arm64
-          make O=out vendor/bangkk_defconfig || make O=out vendor/sm6375-perf_defconfig || make O=out vendor/sm6375_defconfig
+          
+          # Tenta gerar a defconfig padrao vendor da plataforma holi/sm6375
+          if [ -f "arch/arm64/configs/vendor/holi_defconfig" ]; then
+            make O=out vendor/holi_defconfig
+          elif [ -f "arch/arm64/configs/vendor/sm6375_defconfig" ]; then
+            make O=out vendor/sm6375_defconfig
+          elif [ -f "arch/arm64/configs/vendor/bangkk_defconfig" ]; then
+            make O=out vendor/bangkk_defconfig
+          else
+            make O=out defconfig
+          fi
+
           make -j$(nproc) O=out
 
       - name: Upload boot.img Artifact
