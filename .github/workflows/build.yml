@@ -13,7 +13,7 @@ jobs:
       - name: Setup Build Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev curl gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3 python3-pip
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev curl wget gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3 python3-pip
 
       - name: Clone Motorola Kernel Source
         run: |
@@ -22,10 +22,12 @@ jobs:
       - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          # Baixa o código fonte do KernelSU-Next diretamente
-          git clone https://github.com/rifs2023/KernelSU-Next.git KernelSU-Next-Source
+          # Baixa o pacote fonte do KernelSU-Next diretamente via tarball
+          wget -O ksu.tar.gz https://github.com/rifs2023/KernelSU-Next/archive/refs/heads/next.tar.gz
+          mkdir -p KernelSU-Next-Source
+          tar -xzf ksu.tar.gz -C KernelSU-Next-Source --strip-components=1
           
-          # Copia os drivers do KernelSU-Next para dentro do kernel da Motorola
+          # Copia os drivers para dentro do kernel da Motorola
           mkdir -p drivers/kernelsu
           cp -r KernelSU-Next-Source/kernel/* drivers/kernelsu/
           
