@@ -27,13 +27,18 @@ jobs:
           git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git KSU_TEMP
           cp -r KSU_TEMP/kernel/* drivers/kernelsu/
           
-          # Copiar headers da pasta uapi
+          # Copiar headers para uapi
           mkdir -p include/uapi
           if [ -d "KSU_TEMP/kernel/include/uapi" ]; then
             cp -r KSU_TEMP/kernel/include/uapi/* include/uapi/ 2>/dev/null || true
           fi
-          
           rm -rf KSU_TEMP
+
+          # Correcao para o erro 'ksu_cred' undeclared no kernel_umount.c
+          if [ -f "drivers/kernelsu/feature/kernel_umount.c" ]; then
+            sed -i '1i#include "../ksu.h"' drivers/kernelsu/feature/kernel_umount.c
+          fi
+
           grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
           grep -q "kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
 
@@ -52,7 +57,7 @@ jobs:
           # Habilitar KernelSU Next
           echo "CONFIG_KSU=y" >> out/.config
           
-          # Compilar com Clang do sistema
+          # Compilar
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image.gz || make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image
 
