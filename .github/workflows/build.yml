@@ -38,3 +38,4 @@ jobs:
         with:
           name: MotoG84-KernelSU-Next-Spoofed
           path: kernel_src/out/arch/arm64/boot/boot.img
+
