@@ -1,4 +1,4 @@
-name: Build KernelSU Next - Moto G84
+Name: Build KernelSU Next - Moto G84
 
 on:
   workflow_dispatch:
@@ -38,14 +38,17 @@ jobs:
             make O=out ARCH=arm64 gki_defconfig || make O=out ARCH=arm64 defconfig
           fi
           
-          # Habilitar KernelSU Next e dependencias obrigatorias
+          # Habilitar KernelSU Next e dependencias obrigatorias de Boot/Overlay
           echo "CONFIG_KSU=y" >> out/.config
           echo "CONFIG_KSU_NEXT=y" >> out/.config
           echo "CONFIG_OVERLAY_FS=y" >> out/.config
+          echo "CONFIG_BUILD_ARM64_DT_OVERLAY=y" >> out/.config
           
-          # Compilar o Kernel e gerar as DTBs nativas
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image.gz dtbs || make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image dtbs
+          # Atualizar o arquivo de configuracao com as novas flags
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- olddefconfig
+
+          # Compilar o Kernel, Módulos e DTBs nativas
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- Image.gz modules dtbs || make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- Image modules dtbs
 
           # Concatena a Image compactada com os arquivos DTB compilados da Qualcomm/Motorola
           if [ -d "out/arch/arm64/boot/dts/vendor/qcom" ]; then
