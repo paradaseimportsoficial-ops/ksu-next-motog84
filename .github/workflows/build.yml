@@ -1,4 +1,4 @@
-Name: Build KernelSU Next - Moto G84
+name: Build KernelSU Next - Moto G84
 
 on:
   workflow_dispatch:
