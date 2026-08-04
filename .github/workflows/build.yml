@@ -29,22 +29,16 @@ jobs:
           grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
           grep -q "kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
 
-      - name: Auto-Detect Defconfig & Build Kernel
+      - name: Merge Configs & Build Kernel
         run: |
           cd kernel_src
           export ARCH=arm64
           export SUBARCH=arm64
           
-          # Tenta encontrar a defconfig oficial terminada em _defconfig
-          DEFCONFIG_FILE=$(find arch/arm64/configs -name "*defconfig" | grep -E "holi|sm6375|bangkk|gki" | head -n 1 | sed 's|arch/arm64/configs/||')
+          mkdir -p out
           
-          if [ -n "$DEFCONFIG_FILE" ]; then
-            echo "Usando defconfig: $DEFCONFIG_FILE"
-            make O=out $DEFCONFIG_FILE
-          else
-            echo "Usando gki_defconfig padrao"
-            make O=out gki_defconfig || make O=out defconfig
-          fi
+          # Mescla as configs base e do modelo (bangkk / holi)
+          ARCH=arm64 ./scripts/kconfig/merge_config.sh -O out arch/arm64/configs/vendor/holi-perf_defconfig arch/arm64/configs/vendor/bangkk.config || ARCH=arm64 ./scripts/kconfig/merge_config.sh -O out arch/arm64/configs/vendor/holi_defconfig arch/arm64/configs/vendor/bangkk.config || make O=out defconfig
           
           # Habilita o KernelSU
           echo "CONFIG_KSU=y" >> out/.config
