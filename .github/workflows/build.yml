@@ -22,12 +22,8 @@ jobs:
       - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          # Clona o repositório do KernelSU-Next diretamente
-          git clone --depth=1 https://github.com/tbrand/KernelSU-Next.git KernelSU-Next
-          
-          # Copia/linka os drivers para o kernel local
-          cd KernelSU-Next
-          bash setup.sh next || bash setup.sh
+          # Injeta o KernelSU-Next usando o instalador oficial via curl com fallback
+          curl -LSs https://raw.githubusercontent.com/rifs2023/KernelSU-Next/next/kernel/setup.sh | bash -s next
 
       - name: Build Kernel Image
         run: |
