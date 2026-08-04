@@ -15,9 +15,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang
 
-      - name: Clone Motorola Kernel Source
+      - name: Clone Motorola Kernel Source (Moto G84 - bangkk)
         run: |
-          git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
+          git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git -b MMI-U1TCS34.22-64-18-3 kernel_src || git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
+          cd kernel_src
 
       - name: Integrate KernelSU Next Spoofed (v3.3.0.13)
         run: |
@@ -29,7 +30,7 @@ jobs:
           cd kernel_src
           export ARCH=arm64
           export SUBARCH=arm64
-          make O=out vendor/penang_defconfig || make O=out vendor/peppin_defconfig
+          make O=out vendor/bangkk_defconfig || make O=out vendor/sm6375-perf_defconfig || make O=out vendor/sm6375_defconfig
           make -j$(nproc) O=out
 
       - name: Upload boot.img Artifact
