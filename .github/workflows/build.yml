@@ -60,3 +60,4 @@ jobs:
           name: MotoG84-KernelSU-Next-Kernel
           path: |
             kernel_src/out/arch/arm64/boot/Image.gz-dtb
+            kernel_src/out/arch/arm64/boot/Image.gz
