@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Build Environment
         run: |
@@ -37,8 +37,14 @@ jobs:
           
           mkdir -p out
           
-          # Mescla as configs base e do modelo (bangkk / holi)
-          ARCH=arm64 ./scripts/kconfig/merge_config.sh -O out arch/arm64/configs/vendor/holi-perf_defconfig arch/arm64/configs/vendor/bangkk.config || ARCH=arm64 ./scripts/kconfig/merge_config.sh -O out arch/arm64/configs/vendor/holi_defconfig arch/arm64/configs/vendor/bangkk.config || make O=out defconfig
+          # Tenta realizar o merge das configs do modelo bangkk/holi
+          if [ -f "arch/arm64/configs/vendor/holi-perf_defconfig" ]; then
+            ARCH=arm64 ./scripts/kconfig/merge_config.sh -O out arch/arm64/configs/vendor/holi-perf_defconfig arch/arm64/configs/vendor/bangkk.config || true
+          elif [ -f "arch/arm64/configs/vendor/holi_defconfig" ]; then
+            ARCH=arm64 ./scripts/kconfig/merge_config.sh -O out arch/arm64/configs/vendor/holi_defconfig arch/arm64/configs/vendor/bangkk.config || true
+          else
+            make O=out defconfig
+          fi
           
           # Habilita o KernelSU
           echo "CONFIG_KSU=y" >> out/.config
@@ -48,7 +54,7 @@ jobs:
           make -j$(nproc) O=out
 
       - name: Upload boot.img Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: MotoG84-KernelSU-Next
           path: kernel_src/out/arch/arm64/boot/boot.img
