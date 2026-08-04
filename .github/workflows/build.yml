@@ -22,8 +22,11 @@ jobs:
       - name: Integrate KernelSU Next
         run: |
           cd kernel_src
-          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git
-          bash KernelSU-Next/kernel/setup.sh
+          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git KSU_TEMP
+          cd KSU_TEMP/kernel
+          bash setup.sh
+          cd ../..
+          rm -rf KSU_TEMP
 
       - name: Generate Defconfig & Build Kernel
         run: |
