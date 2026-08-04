@@ -13,7 +13,13 @@ jobs:
       - name: Setup Build Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev curl gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev curl gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3 python3-pip
+          pip3 install mkbootimg
+
+      - name: Setup Android Clang Toolchain
+        run: |
+          git clone --depth=1 https://gitlab.com/relink/clang-r416183b.git clang
+          echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
 
       - name: Clone Motorola Kernel Source
         run: |
@@ -29,36 +35,29 @@ jobs:
           grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
           grep -q "kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
 
-      - name: Merge Configs & Build Kernel Image
+      - name: Build Kernel Image
         run: |
           cd kernel_src
-          export ARCH=arm64
-          export SUBARCH=arm64
-          export CC=clang
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          
           mkdir -p out
           
-          # Realiza o merge das configurações específicas do Moto G84 / Qualcomm Holi
+          # Aplicar definicoes do vendor holi/bangkk
           if [ -f "arch/arm64/configs/vendor/holi-perf_defconfig" ]; then
             ARCH=arm64 ./scripts/kconfig/merge_config.sh -O out arch/arm64/configs/vendor/holi-perf_defconfig arch/arm64/configs/vendor/bangkk.config || true
-          elif [ -f "arch/arm64/configs/vendor/holi_defconfig" ]; then
-            ARCH=arm64 ./scripts/kconfig/merge_config.sh -O out arch/arm64/configs/vendor/holi_defconfig arch/arm64/configs/vendor/bangkk.config || true
           else
-            make O=out defconfig
+            make O=out ARCH=arm64 gki_defconfig || make O=out ARCH=arm64 defconfig
           fi
           
-          # Ativa o KernelSU Next na configuração
+          # Habilitar KernelSU Next
           echo "CONFIG_KSU=y" >> out/.config
-          make O=out olddefconfig
           
-          # Compila focando apenas na Imagem do Kernel (Image.gz)
-          make -j$(nproc) O=out Image.gz || make -j$(nproc) O=out Image
+          # Compilar com Clang oficial Android
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image.gz || make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image
 
-      - name: Upload Kernel Image Artifact
+      - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: MotoG84-KernelSU-Next
+          name: MotoG84-KernelSU-Next-Kernel
           path: |
             kernel_src/out/arch/arm64/boot/Image.gz
             kernel_src/out/arch/arm64/boot/Image
