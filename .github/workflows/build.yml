@@ -1,4 +1,4 @@
-name: Build KernelSU Next - Moto G84
+name: Build KernelSU Next (Legacy 5.4) - Moto G84
 
 on:
   workflow_dispatch:
@@ -19,45 +19,39 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git -b android-14 kernel_src || git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
 
-      - name: Setup KernelSU Next Driver
+      - name: Setup KernelSU Next Driver (Legacy mode for 5.4)
         run: |
           cd kernel_src
-          curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh | bash -s next
+          # Injeta a branch legada do KernelSU com suporte a kernel 5.4 e hooks manuais
+          curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh | bash -s legacy
 
-      - name: Build Kernel Image & DTB
+      - name: Build Kernel Image
         run: |
           cd kernel_src
           mkdir -p out
           
+          # Carrega a defconfig da plataforma Qualcomm Holi (Moto G84)
           if [ -f "arch/arm64/configs/vendor/holi-perf_defconfig" ]; then
-            ARCH=arm64 ./scripts/kconfig/merge_config.sh -O out arch/arm64/configs/vendor/holi-perf_defconfig arch/arm64/configs/vendor/bangkk.config || true
+            make O=out ARCH=arm64 vendor/holi-perf_defconfig
+          elif [ -f "arch/arm64/configs/holi-perf_defconfig" ]; then
+            make O=out ARCH=arm64 holi-perf_defconfig
           else
             make O=out ARCH=arm64 gki_defconfig
           fi
-          
-          echo "CONFIG_KSU=y" >> out/.config
-          echo "CONFIG_KSU_NEXT=y" >> out/.config
-          echo "CONFIG_OVERLAY_FS=y" >> out/.config
-          echo "CONFIG_KPROBES=y" >> out/.config
-          echo "CONFIG_HAVE_KPROBES=y" >> out/.config
+
+          # Aplica flags para ativar o KernelSU no kernel 5.4
+          scripts/config --file out/.config -e KSU
+          scripts/config --file out/.config -e KSU_NEXT
+          scripts/config --file out/.config -e OVERLAY_FS
+          scripts/config --file out/.config -e KPROBES
+          scripts/config --file out/.config -e HAVE_KPROBES
           
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- olddefconfig
-
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- Image.gz dtbs
-
-          cd out/arch/arm64/boot
-          find dts/ -name "*.dtb" -exec cat {} + > dtb_all.dtb || true
-          
-          if [ -s "dtb_all.dtb" ]; then
-            cat Image.gz dtb_all.dtb > Image.gz-dtb
-          else
-            cp Image.gz Image.gz-dtb
-          fi
 
       - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: MotoG84-KernelSU-Next-Kernel
           path: |
-            kernel_src/out/arch/arm64/boot/Image.gz-dtb
             kernel_src/out/arch/arm64/boot/Image.gz
