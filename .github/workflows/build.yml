@@ -34,9 +34,9 @@ jobs:
           fi
           rm -rf KSU_TEMP
 
-          # Correcao para o erro 'ksu_cred' undeclared no kernel_umount.c
+          # Inserir o header correto do ksu.h
           if [ -f "drivers/kernelsu/feature/kernel_umount.c" ]; then
-            sed -i '1i#include "../ksu.h"' drivers/kernelsu/feature/kernel_umount.c
+            sed -i '1i#include "ksu.h"' drivers/kernelsu/feature/kernel_umount.c
           fi
 
           grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
