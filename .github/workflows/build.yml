@@ -23,24 +23,8 @@ jobs:
       - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          mkdir -p drivers/kernelsu
-          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git KSU_TEMP
-          cp -r KSU_TEMP/kernel/* drivers/kernelsu/
-          
-          # Copiar headers para uapi
-          mkdir -p include/uapi
-          if [ -d "KSU_TEMP/kernel/include/uapi" ]; then
-            cp -r KSU_TEMP/kernel/include/uapi/* include/uapi/ 2>/dev/null || true
-          fi
-          rm -rf KSU_TEMP
-
-          # Inserir o header correto do ksu.h
-          if [ -f "drivers/kernelsu/feature/kernel_umount.c" ]; then
-            sed -i '1i#include "ksu.h"' drivers/kernelsu/feature/kernel_umount.c
-          fi
-
-          grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
-          grep -q "kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+          # Executa o script oficial de integracao do KernelSU-Next
+          curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh | bash -s next
 
       - name: Build Kernel Image
         run: |
