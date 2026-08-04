@@ -13,7 +13,7 @@ jobs:
       - name: Setup Build Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev curl
 
       - name: Clone Motorola Kernel Source
         run: |
@@ -22,7 +22,10 @@ jobs:
       - name: Integrate KernelSU Next
         run: |
           cd kernel_src
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+          git init
+          git config user.name "actions"
+          git config user.email "actions@github.com"
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s next
 
       - name: Generate Defconfig & Build Kernel
         run: |
