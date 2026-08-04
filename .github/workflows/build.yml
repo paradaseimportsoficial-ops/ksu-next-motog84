@@ -35,11 +35,16 @@ jobs:
           export ARCH=arm64
           export SUBARCH=arm64
           
-          # Busca automaticamente a defconfig valida no repositorio da Motorola
-          CONF=$(find arch/arm64/configs -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
-          echo "Defconfig encontrada: $CONF"
+          # Tenta encontrar a defconfig oficial terminada em _defconfig
+          DEFCONFIG_FILE=$(find arch/arm64/configs -name "*defconfig" | grep -E "holi|sm6375|bangkk|gki" | head -n 1 | sed 's|arch/arm64/configs/||')
           
-          make O=out $CONF
+          if [ -n "$DEFCONFIG_FILE" ]; then
+            echo "Usando defconfig: $DEFCONFIG_FILE"
+            make O=out $DEFCONFIG_FILE
+          else
+            echo "Usando gki_defconfig padrao"
+            make O=out gki_defconfig || make O=out defconfig
+          fi
           
           # Habilita o KernelSU
           echo "CONFIG_KSU=y" >> out/.config
