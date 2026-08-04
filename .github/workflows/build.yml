@@ -22,8 +22,8 @@ jobs:
       - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          # Injeta o KernelSU Next (branch v0.9.5/main estável para kernels legados)
-          curl -LSs https://raw.githubusercontent.com/rifs2023/KernelSU-Next/next/kernel/setup.sh | bash -s next
+          # Injeta o driver do KernelSU Next via repositório oficial
+          curl -LSs https://raw.githubusercontent.com/tbrand/KernelSU-Next/next/kernel/setup.sh | bash -s next
 
       - name: Build Kernel Image
         run: |
@@ -39,14 +39,12 @@ jobs:
             make O=out ARCH=arm64 gki_defconfig
           fi
 
-          # Ativa flags necessárias do KernelSU Next e ajusta KPROBES para evitar kernel panic no SELinux
+          # Configurações do KernelSU
           scripts/config --file out/.config -e KSU
           scripts/config --file out/.config -e OVERLAY_FS
           scripts/config --file out/.config -e KPROBES
           scripts/config --file out/.config -e HAVE_KPROBES
-          scripts/config --file out/.config -e KPROBE_EVENTS
-          scripts/config --file out/.config -d KSU_WITH_KPROBES
-
+          
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error" olddefconfig
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error" Image.gz dtbs
 
