@@ -22,15 +22,12 @@ jobs:
       - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash - || true
-          if [ ! -d "drivers/kernelsu" ]; then
-            git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git KSU_TEMP
-            mkdir -p drivers/kernelsu
-            cp -r KSU_TEMP/kernel/* drivers/kernelsu/
-            rm -rf KSU_TEMP
-            echo "obj-y += kernelsu/" >> drivers/Makefile
-            echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
-          fi
+          mkdir -p drivers/kernelsu
+          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git KSU_TEMP
+          cp -r KSU_TEMP/kernel/* drivers/kernelsu/
+          rm -rf KSU_TEMP
+          grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
+          grep -q "kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
 
       - name: Generate Defconfig & Build Kernel
         run: |
@@ -38,22 +35,18 @@ jobs:
           export ARCH=arm64
           export SUBARCH=arm64
           
-          # Procura a defconfig correta no repositorio
-          if [ -f "arch/arm64/configs/vendor/holi_defconfig" ]; then
-            make O=out vendor/holi_defconfig
-          elif [ -f "arch/arm64/configs/vendor/sm6375_defconfig" ]; then
-            make O=out vendor/sm6375_defconfig
-          elif [ -f "arch/arm64/configs/vendor/bangkk_defconfig" ]; then
-            make O=out vendor/bangkk_defconfig
-          else
-            make O=out defconfig
-          fi
-
+          # Cria uma configuração padrao base funcional para ARM64 Snapdragon
+          make O=out defconfig
+          
+          # Habilita o suporte ao KernelSU
           echo "CONFIG_KSU=y" >> out/.config
+          
+          # Atualiza e valida a configuracao
+          make O=out olddefconfig
+          
+          # Compila o Kernel
           make -j$(nproc) O=out
 
       - name: Upload boot.img Artifact
         uses: actions/upload-artifact@v3
         with:
-          name: MotoG84-KernelSU-Next
-          path: kernel_src/out/arch/arm64/boot/boot.img
