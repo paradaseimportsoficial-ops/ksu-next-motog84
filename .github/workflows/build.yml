@@ -18,7 +18,10 @@ jobs:
 
       - name: Setup Android Clang Toolchain
         run: |
-          git clone --depth=1 https://gitlab.com/relink/clang-r416183b.git clang
+          mkdir clang
+          cd clang
+          curl -LO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r416183b.tar.gz
+          tar -xzf clang-r416183b.tar.gz
           echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
 
       - name: Clone Motorola Kernel Source
@@ -28,8 +31,17 @@ jobs:
       - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s next
+          mkdir -p drivers/kernelsu
+          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git KSU_TEMP
+          cp -r KSU_TEMP/kernel/* drivers/kernelsu/
           
+          # Criar pasta uapi na raiz de include se nao existir e copiar os headers
+          mkdir -p include/uapi
+          cp -r KSU_TEMP/kernel/include/uapi/* include/uapi/ 2>/dev/null || true
+          
+          rm -rf KSU_TEMP
+          grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
+          grep -q "kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
 
       - name: Build Kernel Image
         run: |
