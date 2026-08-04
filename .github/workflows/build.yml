@@ -19,15 +19,11 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
 
-      - name: Direct Integration of KernelSU Next
+      - name: Integrate KernelSU Next
         run: |
           cd kernel_src
-          mkdir -p drivers/kernelsu
-          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git drivers/kernelsu/KSU_TMP
-          cp -r drivers/kernelsu/KSU_TMP/kernel/* drivers/kernelsu/
-          rm -rf drivers/kernelsu/KSU_TMP
-          grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
-          grep -q "kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git
+          bash KernelSU-Next/kernel/setup.sh
 
       - name: Generate Defconfig & Build Kernel
         run: |
