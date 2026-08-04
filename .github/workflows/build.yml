@@ -17,12 +17,9 @@ jobs:
           pip3 install mkbootimg --break-system-packages || true
 
       - name: Setup Android Clang Toolchain
-        run: |
-          mkdir clang
-          cd clang
-          curl -LO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r416183b.tar.gz
-          tar -xzf clang-r416183b.tar.gz
-          echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
+        uses: notsyncing/setup-clang@main
+        with:
+          version: '12.0'
 
       - name: Clone Motorola Kernel Source
         run: |
@@ -35,9 +32,11 @@ jobs:
           git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git KSU_TEMP
           cp -r KSU_TEMP/kernel/* drivers/kernelsu/
           
-          # Criar pasta uapi na raiz de include se nao existir e copiar os headers
+          # Copiar headers da pasta uapi
           mkdir -p include/uapi
-          cp -r KSU_TEMP/kernel/include/uapi/* include/uapi/ 2>/dev/null || true
+          if [ -d "KSU_TEMP/kernel/include/uapi" ]; then
+            cp -r KSU_TEMP/kernel/include/uapi/* include/uapi/ 2>/dev/null || true
+          fi
           
           rm -rf KSU_TEMP
           grep -q "kernelsu" drivers/Makefile || echo "obj-y += kernelsu/" >> drivers/Makefile
