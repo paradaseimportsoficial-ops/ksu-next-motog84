@@ -1,4 +1,4 @@
-name: Build KernelSU Next - Moto G84
+Name: Build KernelSU Next - Moto G84
 
 on:
   workflow_dispatch:
@@ -14,16 +14,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev curl gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3 python3-pip
-          pip3 install mkbootimg --break-system-packages || true
 
       - name: Clone Motorola Kernel Source
         run: |
-          git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
+          # Clona o repositório correto do MSM filtrando a branch do sm6375 / bangkk se disponível
+          git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git -b android-14 kernel_src || git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
 
       - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          # Executa o script oficial de integracao do KernelSU-Next
           curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh | bash -s next
 
       - name: Build Kernel Image & DTB
@@ -31,30 +30,33 @@ jobs:
           cd kernel_src
           mkdir -p out
           
-          # Aplicar definicoes do vendor holi/bangkk
+          # Carregar a config oficial do Moto G84 (holi/bangkk)
           if [ -f "arch/arm64/configs/vendor/holi-perf_defconfig" ]; then
             ARCH=arm64 ./scripts/kconfig/merge_config.sh -O out arch/arm64/configs/vendor/holi-perf_defconfig arch/arm64/configs/vendor/bangkk.config || true
           else
-            make O=out ARCH=arm64 gki_defconfig || make O=out ARCH=arm64 defconfig
+            make O=out ARCH=arm64 gki_defconfig
           fi
           
-          # Habilitar KernelSU Next e dependencias obrigatorias de Boot/Overlay
+          # Ativar flags essenciais do KernelSU-Next
           echo "CONFIG_KSU=y" >> out/.config
           echo "CONFIG_KSU_NEXT=y" >> out/.config
           echo "CONFIG_OVERLAY_FS=y" >> out/.config
-          echo "CONFIG_BUILD_ARM64_DT_OVERLAY=y" >> out/.config
+          echo "CONFIG_KPROBES=y" >> out/.config
+          echo "CONFIG_HAVE_KPROBES=y" >> out/.config
           
-          # Atualizar o arquivo de configuracao com as novas flags
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- olddefconfig
 
-          # Compilar o Kernel, Módulos e DTBs nativas
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- Image.gz modules dtbs || make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- Image modules dtbs
+          # Compilar Kernel + DTBs
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- Image.gz dtbs
 
-          # Concatena a Image compactada com os arquivos DTB compilados da Qualcomm/Motorola
-          if [ -d "out/arch/arm64/boot/dts/vendor/qcom" ]; then
-            cat out/arch/arm64/boot/Image.gz out/arch/arm64/boot/dts/vendor/qcom/*.dtb > out/arch/arm64/boot/Image.gz-dtb || cat out/arch/arm64/boot/Image out/arch/arm64/boot/dts/vendor/qcom/*.dtb > out/arch/arm64/boot/Image-dtb
-          elif [ -d "out/arch/arm64/boot/dts/qcom" ]; then
-            cat out/arch/arm64/boot/Image.gz out/arch/arm64/boot/dts/qcom/*.dtb > out/arch/arm64/boot/Image.gz-dtb || cat out/arch/arm64/boot/Image out/arch/arm64/boot/dts/qcom/*.dtb > out/arch/arm64/boot/Image-dtb
+          # Concatenação universal de todas as DTBs da Qualcomm/Motorola encontradas na build
+          cd out/arch/arm64/boot
+          find dts/ -name "*.dtb" -exec cat {} + > dtb_all.dtb || true
+          
+          if [ -s "dtb_all.dtb" ]; then
+            cat Image.gz dtb_all.dtb > Image.gz-dtb
+          else
+            cp Image.gz Image.gz-dtb
           fi
 
       - name: Upload Kernel Artifacts
@@ -63,6 +65,3 @@ jobs:
           name: MotoG84-KernelSU-Next-Kernel
           path: |
             kernel_src/out/arch/arm64/boot/Image.gz-dtb
-            kernel_src/out/arch/arm64/boot/Image-dtb
-            kernel_src/out/arch/arm64/boot/Image.gz
-            kernel_src/out/arch/arm64/boot/Image
