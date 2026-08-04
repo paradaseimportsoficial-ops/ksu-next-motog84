@@ -16,11 +16,6 @@ jobs:
           sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev curl gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3 python3-pip
           pip3 install mkbootimg --break-system-packages || true
 
-      - name: Setup Android Clang Toolchain
-        uses: notsyncing/setup-clang@main
-        with:
-          version: '12.0'
-
       - name: Clone Motorola Kernel Source
         run: |
           git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
@@ -57,7 +52,7 @@ jobs:
           # Habilitar KernelSU Next
           echo "CONFIG_KSU=y" >> out/.config
           
-          # Compilar com Clang oficial Android
+          # Compilar com Clang do sistema
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image.gz || make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- Image
 
