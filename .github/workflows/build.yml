@@ -1,4 +1,4 @@
-name: Build KernelSU Next Spoofed - Moto G84
+name: Build KernelSU Next - Moto G84
 
 on:
   workflow_dispatch:
@@ -17,13 +17,12 @@ jobs:
 
       - name: Clone Motorola Kernel Source
         run: |
-          git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git -b MMI-U1TCS34.22-64-18-3 kernel_src || git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
-          cd kernel_src
+          git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
 
-      - name: Integrate KernelSU Next Spoofed (v3.3.0.13)
+      - name: Integrate KernelSU Next
         run: |
           cd kernel_src
-          curl -LSs "https://raw.githubusercontent.com/rifs3/KernelSU-Next-Spoofed/v3.3.0.13/kernel/setup.sh" | bash -s v3.3.0.13
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
 
       - name: Generate Defconfig & Build Kernel
         run: |
@@ -31,7 +30,6 @@ jobs:
           export ARCH=arm64
           export SUBARCH=arm64
           
-          # Tenta gerar a defconfig padrao vendor da plataforma holi/sm6375
           if [ -f "arch/arm64/configs/vendor/holi_defconfig" ]; then
             make O=out vendor/holi_defconfig
           elif [ -f "arch/arm64/configs/vendor/sm6375_defconfig" ]; then
@@ -47,5 +45,5 @@ jobs:
       - name: Upload boot.img Artifact
         uses: actions/upload-artifact@v3
         with:
-          name: MotoG84-KernelSU-Next-Spoofed
+          name: MotoG84-KernelSU-Next
           path: kernel_src/out/arch/arm64/boot/boot.img
