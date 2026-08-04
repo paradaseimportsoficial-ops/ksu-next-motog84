@@ -1,4 +1,4 @@
-Name: Build KernelSU Next - Moto G84
+name: Build KernelSU Next - Moto G84
 
 on:
   workflow_dispatch:
@@ -17,7 +17,6 @@ jobs:
 
       - name: Clone Motorola Kernel Source
         run: |
-          # Clona o repositório correto do MSM filtrando a branch do sm6375 / bangkk se disponível
           git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git -b android-14 kernel_src || git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
 
       - name: Setup KernelSU Next Driver
@@ -30,14 +29,12 @@ jobs:
           cd kernel_src
           mkdir -p out
           
-          # Carregar a config oficial do Moto G84 (holi/bangkk)
           if [ -f "arch/arm64/configs/vendor/holi-perf_defconfig" ]; then
             ARCH=arm64 ./scripts/kconfig/merge_config.sh -O out arch/arm64/configs/vendor/holi-perf_defconfig arch/arm64/configs/vendor/bangkk.config || true
           else
             make O=out ARCH=arm64 gki_defconfig
           fi
           
-          # Ativar flags essenciais do KernelSU-Next
           echo "CONFIG_KSU=y" >> out/.config
           echo "CONFIG_KSU_NEXT=y" >> out/.config
           echo "CONFIG_OVERLAY_FS=y" >> out/.config
@@ -46,10 +43,8 @@ jobs:
           
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- olddefconfig
 
-          # Compilar Kernel + DTBs
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- Image.gz dtbs
 
-          # Concatenação universal de todas as DTBs da Qualcomm/Motorola encontradas na build
           cd out/arch/arm64/boot
           find dts/ -name "*.dtb" -exec cat {} + > dtb_all.dtb || true
           
