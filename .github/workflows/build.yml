@@ -22,26 +22,22 @@ jobs:
       - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          # Reseta arquivos de configuracao para evitar residuos de builds anteriores
-          git checkout drivers/Kconfig drivers/Makefile
-          
-          # Remove versoes antigas e clona o KernelSU-Next limpo
           rm -rf drivers/kernelsu
           git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git drivers/kernelsu
+          rm -rf drivers/kernelsu/.git
 
-          # Move os fontes da pasta kernel/ para a raiz de drivers/kernelsu/
+          # Copia fontes se existirem em subpasta kernel/
           if [ -d "drivers/kernelsu/kernel" ]; then
             cp -r drivers/kernelsu/kernel/* drivers/kernelsu/
           fi
 
-          # Adiciona referencia limpa no Kconfig e Makefile principais
-          echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
-          echo 'obj-y += kernelsu/' >> drivers/Makefile
+          # Injeta chamadas no Kconfig e Makefile apenas se nao existirem
+          grep -q "drivers/kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+          grep -q "drivers/kernelsu" drivers/Makefile || echo 'obj-y += kernelsu/' >> drivers/Makefile
 
       - name: Apply Manual Hooks (Legacy Kernel Patch)
         run: |
           cd kernel_src
-          # Aplica os ganchos manuais nas syscalls de execve e openat para kernels 5.4
           if ! grep -q "ksu_handle_execve" fs/exec.c; then
             sed -i '/setup_new_exec(bprm);/a \	extern int ksu_handle_execve(struct filename **filename_ptr); ksu_handle_execve(&bprm->filename);' fs/exec.c
           fi
@@ -54,18 +50,25 @@ jobs:
           cd kernel_src
           mkdir -p out
           
-          # Seleciona a defconfig do Snapdragon 695 (Holi)
-          if [ -f "arch/arm64/configs/vendor/holi-perf_defconfig" ]; then
-            DEFCONFIG="vendor/holi-perf_defconfig"
-          elif [ -f "arch/arm64/configs/holi-perf_defconfig" ]; then
-            DEFCONFIG="holi-perf_defconfig"
-          else
-            DEFCONFIG="gki_defconfig"
+          # Procura a defconfig correta do Snapdragon 695 / Holi
+          TARGET_DEFCONFIG=""
+          for cfg in "vendor/holi-perf_defconfig" "holi-perf_defconfig" "vendor/bangkk_defconfig" "bangkk_defconfig"; do
+            if [ -f "arch/arm64/configs/$cfg" ]; then
+              TARGET_DEFCONFIG="$cfg"
+              break
+            fi
+          done
+
+          if [ -z "$TARGET_DEFCONFIG" ]; then
+            # Se nao achar defconfig especifica, usa a primeira defconfig vendor disponível
+            TARGET_DEFCONFIG=$(find arch/arm64/configs/ -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
           fi
 
-          make O=out ARCH=arm64 $DEFCONFIG
+          echo "Usando defconfig: $TARGET_DEFCONFIG"
 
-          # Ativa o KSU estatico e desativa KPROBES
+          make O=out ARCH=arm64 $TARGET_DEFCONFIG
+
+          # Ajusta flags do KSU e desativa Kprobes
           scripts/config --file out/.config -e KSU
           scripts/config --file out/.config -e OVERLAY_FS
           scripts/config --file out/.config -d KPROBES
@@ -74,7 +77,7 @@ jobs:
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error -Wno-fatal-warnings" olddefconfig
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error -Wno-fatal-warnings" Image.gz dtbs
 
-          # Concatena a arvore de dispositivos (DTB) com o kernel comprimido
+          # Concatena a DTB com o Image.gz para padrão Motorola
           find out/arch/arm64/boot/dts/ -name "*.dtb" -exec cat {} + > out/arch/arm64/boot/dtb
           cat out/arch/arm64/boot/Image.gz out/arch/arm64/boot/dtb > out/arch/arm64/boot/Image.gz-dtb
 
@@ -84,11 +87,10 @@ jobs:
           rm -rf AnyKernel3/.git
           cp kernel_src/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/Image.gz-dtb
           
-          # Ajusta parâmetros do AnyKernel3 para a partição do Moto G84
           cd AnyKernel3
           sed -i 's/block=auto/block=\/dev\/block\/bootdevice\/by-name\/boot/g' anykernel.sh
           sed -i 's/is_slot_device=auto/is_slot_device=1/g' anykernel.sh
-          zip -r9 ../MotoG84-KernelSU-Next.zip * -x .git README.md
+          zip -r9 ../MotoG84-KernelSU-Next.zip * -x README.md
 
       - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
