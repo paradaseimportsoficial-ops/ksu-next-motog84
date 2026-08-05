@@ -33,7 +33,7 @@ jobs:
           grep -q "drivers/kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
           grep -q "drivers/kernelsu" drivers/Makefile || echo 'obj-y += kernelsu/' >> drivers/Makefile
 
-      - name: Apply Manual Hooks (Legacy Kernel Patch)
+      - name: Apply Manual Hooks & Linker Stubs
         run: |
           python3 -c '
           # Injeção em fs/exec.c
@@ -58,6 +58,14 @@ jobs:
               content = content.replace(target2, patch2, 1)
               with open("kernel_src/fs/open.c", "w") as f:
                   f.write(content)
+
+          # Injeção de Stubs no arm-smmu.c para resolver símbolos faltantes no linker
+          with open("kernel_src/drivers/iommu/arm-smmu.c", "a") as f:
+              f.write("\n\n/* KernelSU-Next Build Stubs */\n")
+              f.write("void *qcom_alloc_io_pgtable_ops(int fmt, void *cfg, void *cookie) { return (void*)0; }\n")
+              f.write("void qcom_free_io_pgtable_ops(void *ops) {}\n")
+              f.write("int qcom_iommu_get_fast_iova_range(struct device *dev, void *p) { return -1; }\n")
+              f.write("int qcom_iommu_generate_resv_regions(struct device *dev, void *list) { return 0; }\n")
           '
 
       - name: Build Kernel Image & DTB
@@ -79,11 +87,6 @@ jobs:
 
           echo "Usando defconfig: $TARGET_DEFCONFIG"
 
-          # Remove do defconfig a chamada das funções proprietárias do IOMMU que causam erro no linker
-          DEFCONFIG_PATH="arch/arm64/configs/$TARGET_DEFCONFIG"
-          sed -i '/CONFIG_QCOM_IO_PGTABLE_FAST/d' $DEFCONFIG_PATH || true
-          echo "CONFIG_QCOM_IO_PGTABLE_FAST=n" >> $DEFCONFIG_PATH
-
           make O=out ARCH=arm64 $TARGET_DEFCONFIG
 
           # Ajustes KernelSU
@@ -91,9 +94,6 @@ jobs:
           scripts/config --file out/.config -e OVERLAY_FS
           scripts/config --file out/.config -d KPROBES
           scripts/config --file out/.config -d HAVE_KPROBES
-
-          # Desativa explicitamente o fast io-pgtable no .config final
-          scripts/config --file out/.config -d QCOM_IO_PGTABLE_FAST
 
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" olddefconfig
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" Image.gz
