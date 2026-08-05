@@ -33,7 +33,7 @@ jobs:
           grep -q "drivers/kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
           grep -q "drivers/kernelsu" drivers/Makefile || echo 'obj-y += kernelsu/' >> drivers/Makefile
 
-      - name: Apply Manual Hooks & Linker Stubs
+      - name: Apply Manual Hooks & Inject Dedicated Linker Stubs
         run: |
           python3 -c '
           # Injeção em fs/exec.c
@@ -59,14 +59,21 @@ jobs:
               with open("kernel_src/fs/open.c", "w") as f:
                   f.write(content)
 
-          # Injeção de Stubs no arm-smmu.c para resolver símbolos faltantes no linker
-          with open("kernel_src/drivers/iommu/arm-smmu.c", "a") as f:
-              f.write("\n\n/* KernelSU-Next Build Stubs */\n")
-              f.write("void *qcom_alloc_io_pgtable_ops(int fmt, void *cfg, void *cookie) { return (void*)0; }\n")
-              f.write("void qcom_free_io_pgtable_ops(void *ops) {}\n")
-              f.write("int qcom_iommu_get_fast_iova_range(struct device *dev, void *p) { return -1; }\n")
-              f.write("int qcom_iommu_generate_resv_regions(struct device *dev, void *list) { return 0; }\n")
+          # Criar um arquivo C dedicado para os stubs da Qualcomm IOMMU
+          stub_code = """#include <linux/types.h>
+          #include <linux/device.h>
+
+          void *qcom_alloc_io_pgtable_ops(int fmt, void *cfg, void *cookie) { return (void*)0; }
+          void qcom_free_io_pgtable_ops(void *ops) {}
+          int qcom_iommu_get_fast_iova_range(struct device *dev, void *p) { return -1; }
+          int qcom_iommu_generate_resv_regions(struct device *dev, void *list) { return 0; }
+          """
+          with open("kernel_src/drivers/iommu/qcom_stubs.c", "w") as f:
+              f.write(stub_code)
           '
+
+          # Adicionar o objeto de stubs diretamente ao Makefile para ser compilado como qcom_stubs.o
+          echo "obj-y += qcom_stubs.o" >> kernel_src/drivers/iommu/Makefile
 
       - name: Build Kernel Image & DTB
         run: |
