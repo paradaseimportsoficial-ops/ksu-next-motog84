@@ -26,12 +26,10 @@ jobs:
           git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git drivers/kernelsu
           rm -rf drivers/kernelsu/.git
 
-          # Copia fontes se existirem em subpasta kernel/
           if [ -d "drivers/kernelsu/kernel" ]; then
             cp -r drivers/kernelsu/kernel/* drivers/kernelsu/
           fi
 
-          # Injeta chamadas no Kconfig e Makefile apenas se nao existirem
           grep -q "drivers/kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
           grep -q "drivers/kernelsu" drivers/Makefile || echo 'obj-y += kernelsu/' >> drivers/Makefile
 
@@ -50,7 +48,6 @@ jobs:
           cd kernel_src
           mkdir -p out
           
-          # Procura a defconfig correta do Snapdragon 695 / Holi
           TARGET_DEFCONFIG=""
           for cfg in "vendor/holi-perf_defconfig" "holi-perf_defconfig" "vendor/bangkk_defconfig" "bangkk_defconfig"; do
             if [ -f "arch/arm64/configs/$cfg" ]; then
@@ -60,7 +57,6 @@ jobs:
           done
 
           if [ -z "$TARGET_DEFCONFIG" ]; then
-            # Se nao achar defconfig especifica, usa a primeira defconfig vendor disponível
             TARGET_DEFCONFIG=$(find arch/arm64/configs/ -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
           fi
 
@@ -68,16 +64,14 @@ jobs:
 
           make O=out ARCH=arm64 $TARGET_DEFCONFIG
 
-          # Ajusta flags do KSU e desativa Kprobes
           scripts/config --file out/.config -e KSU
           scripts/config --file out/.config -e OVERLAY_FS
           scripts/config --file out/.config -d KPROBES
           scripts/config --file out/.config -d HAVE_KPROBES
           
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error -Wno-fatal-warnings" olddefconfig
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error -Wno-fatal-warnings" Image.gz dtbs
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" olddefconfig
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" Image.gz dtbs
 
-          # Concatena a DTB com o Image.gz para padrão Motorola
           find out/arch/arm64/boot/dts/ -name "*.dtb" -exec cat {} + > out/arch/arm64/boot/dtb
           cat out/arch/arm64/boot/Image.gz out/arch/arm64/boot/dtb > out/arch/arm64/boot/Image.gz-dtb
 
