@@ -19,17 +19,24 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git -b android-14 kernel_src || git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
 
-      - name: Setup KernelSU Next Driver
+      - name: Setup KernelSU Next Driver (Direct Clone)
         run: |
           cd kernel_src
-          # Baixa o script oficial do KernelSU-Next de forma segura
-          curl -LSs "https://raw.githubusercontent.com/rifs2023/KernelSU-Next/next/kernel/setup.sh" -o setup.sh || curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" -o setup.sh
-          bash setup.sh next
+          # Clona diretamente o repositório do KernelSU-Next na estrutura do kernel
+          git clone --depth=1 https://github.com/rifs2023/KernelSU-Next.git drivers/kernelsu
+          
+          # Injeta a referência do KernelSU no Kconfig e Makefile do kernel
+          if ! grep -q "drivers/kernelsu" drivers/Kconfig; then
+            echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+          fi
+          if ! grep -q "drivers/kernelsu" drivers/Makefile; then
+            echo 'obj-y += kernelsu/' >> drivers/Makefile
+          fi
 
       - name: Apply Manual Hooks (Legacy Kernel Patch)
         run: |
           cd kernel_src
-          # Aplica os ganchos manuais nas syscalls de execve e openat
+          # Aplica os ganchos manuais nas syscalls de execve e openat para kernels 5.4
           if ! grep -q "ksu_handle_execve" fs/exec.c; then
             sed -i '/setup_new_exec(bprm);/a \	extern int ksu_handle_execve(struct filename **filename_ptr); ksu_handle_execve(&bprm->filename);' fs/exec.c
           fi
@@ -53,7 +60,7 @@ jobs:
 
           make O=out ARCH=arm64 $DEFCONFIG
 
-          # Ativa o KSU estatico e desativa KPROBES
+          # Ativa o KSU estático e desativa KPROBES (evita o Kernel Panic)
           scripts/config --file out/.config -e KSU
           scripts/config --file out/.config -e OVERLAY_FS
           scripts/config --file out/.config -d KPROBES
@@ -62,7 +69,7 @@ jobs:
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error" olddefconfig
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error" Image.gz dtbs
 
-          # Concatena a arvore de dispositivos (DTB) com o kernel comprimido
+          # Concatena a árvore de dispositivos (DTB) com o kernel comprimido
           find out/arch/arm64/boot/dts/ -name "*.dtb" -exec cat {} + > out/arch/arm64/boot/dtb
           cat out/arch/arm64/boot/Image.gz out/arch/arm64/boot/dtb > out/arch/arm64/boot/Image.gz-dtb
 
