@@ -19,13 +19,18 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git -b android-14 kernel_src || git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
 
-      - name: Setup KernelSU Next Driver (Public Clone)
+      - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          # Clona o repositorio oficial publico do KernelSU-Next
+          # Clona o KernelSU-Next
           git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git drivers/kernelsu
           
-          # Injeta a referencia do KernelSU no Kconfig e Makefile do kernel
+          # Cria link simbolico do Kconfig caso esteja na pasta kernel/
+          if [ -f "drivers/kernelsu/kernel/Kconfig" ] && [ ! -f "drivers/kernelsu/Kconfig" ]; then
+            ln -s kernel/Kconfig drivers/kernelsu/Kconfig
+          fi
+
+          # Injeta as referencias no Kconfig e Makefile principais do kernel
           if ! grep -q "drivers/kernelsu" drivers/Kconfig; then
             echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
           fi
@@ -60,14 +65,14 @@ jobs:
 
           make O=out ARCH=arm64 $DEFCONFIG
 
-          # Ativa o KSU estatico e desativa KPROBES (evita o Kernel Panic)
+          # Ativa o KSU estatico e desativa KPROBES (evita Kernel Panic no boot)
           scripts/config --file out/.config -e KSU
           scripts/config --file out/.config -e OVERLAY_FS
           scripts/config --file out/.config -d KPROBES
           scripts/config --file out/.config -d HAVE_KPROBES
           
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error" olddefconfig
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error" Image.gz dtbs
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error -DKSU_COMPAT_HAS_CURRENT_UID" olddefconfig
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error -DKSU_COMPAT_HAS_CURRENT_UID" Image.gz dtbs
 
           # Concatena a arvore de dispositivos (DTB) com o kernel comprimido
           find out/arch/arm64/boot/dts/ -name "*.dtb" -exec cat {} + > out/arch/arm64/boot/dtb
