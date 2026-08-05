@@ -22,37 +22,63 @@ jobs:
       - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          # Instala o KernelSU-Next diretamente na árvore do kernel usando o script oficial
-          curl -LSs "https://raw.githubusercontent.com/rifs2023/KernelSU-Next/next/kernel/setup.sh" | bash -s next || \
-          curl -LSs "https://raw.githubusercontent.com/rifs2023/KernelSU-Next/main/kernel/setup.sh" | bash -s main || \
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+          # Integra o KernelSU-Next na arvore de drivers
+          curl -LSs "https://raw.githubusercontent.com/rifs2023/KernelSU-Next/next/kernel/setup.sh" | bash -s next
 
-      - name: Build Kernel Image
+      - name: Apply Manual Hooks (Legacy Kernel Patch)
+        run: |
+          cd kernel_src
+          # Aplica os ganchos manuais nas syscalls de execve e openat para kernels sem Kprobes
+          if ! grep -q "ksu_handle_execve" fs/exec.c; then
+            sed -i '/setup_new_exec(bprm);/a \	extern int ksu_handle_execve(struct filename **filename_ptr); ksu_handle_execve(&bprm->filename);' fs/exec.c
+          fi
+          if ! grep -q "ksu_handle_faccessat" fs/open.c; then
+            sed -i '/SYSCALL_DEFINE3(faccessat/a \	extern int ksu_handle_faccessat(int *dfd, const char __user **filename_ptr, int *mode, int *flags); ksu_handle_faccessat(&dfd, &filename, &mode, &flags);' fs/open.c
+          fi
+
+      - name: Build Kernel Image & DTB
         run: |
           cd kernel_src
           mkdir -p out
           
-          # Aplica a defconfig do Snapdragon 695 / Holi (Moto G84)
+          # Seleciona a defconfig do Snapdragon 695 (Holi)
           if [ -f "arch/arm64/configs/vendor/holi-perf_defconfig" ]; then
-            make O=out ARCH=arm64 vendor/holi-perf_defconfig
+            DEFCONFIG="vendor/holi-perf_defconfig"
           elif [ -f "arch/arm64/configs/holi-perf_defconfig" ]; then
-            make O=out ARCH=arm64 holi-perf_defconfig
+            DEFCONFIG="holi-perf_defconfig"
           else
-            make O=out ARCH=arm64 gki_defconfig
+            DEFCONFIG="gki_defconfig"
           fi
 
-          # Configurações do KernelSU
+          make O=out ARCH=arm64 $DEFCONFIG
+
+          # Ativa o KSU estatico e desativa KPROBES
           scripts/config --file out/.config -e KSU
           scripts/config --file out/.config -e OVERLAY_FS
-          scripts/config --file out/.config -e KPROBES
-          scripts/config --file out/.config -e HAVE_KPROBES
+          scripts/config --file out/.config -d KPROBES
+          scripts/config --file out/.config -d HAVE_KPROBES
           
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error" olddefconfig
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error" Image.gz dtbs
 
+          # Concatena a arvore de dispositivos (DTB) com o kernel comprimido
+          find out/arch/arm64/boot/dts/ -name "*.dtb" -exec cat {} + > out/arch/arm64/boot/dtb
+          cat out/arch/arm64/boot/Image.gz out/arch/arm64/boot/dtb > out/arch/arm64/boot/Image.gz-dtb
+
+      - name: Package with AnyKernel3
+        run: |
+          git clone https://github.com/osm0sis/AnyKernel3 --depth=1 AnyKernel3
+          rm -rf AnyKernel3/.git
+          cp kernel_src/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/Image.gz-dtb
+          
+          # Ajusta parâmetros do AnyKernel3 para a partição do Moto G84
+          cd AnyKernel3
+          sed -i 's/block=auto/block=\/dev\/block\/bootdevice\/by-name\/boot/g' anykernel.sh
+          sed -i 's/is_slot_device=auto/is_slot_device=1/g' anykernel.sh
+          zip -r9 ../MotoG84-KernelSU-Next.zip * -x .git README.md
+
       - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: MotoG84-KernelSU-Kernel
-          path: |
-            kernel_src/out/arch/arm64/boot/Image.gz
+          name: MotoG84-KernelSU-Next-Flashable
+          path: MotoG84-KernelSU-Next.zip
