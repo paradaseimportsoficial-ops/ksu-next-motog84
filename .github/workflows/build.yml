@@ -33,7 +33,7 @@ jobs:
           grep -q "drivers/kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
           grep -q "drivers/kernelsu" drivers/Makefile || echo 'obj-y += kernelsu/' >> drivers/Makefile
 
-      - name: Apply Manual Hooks (Legacy Kernel Patch)
+      - name: Apply Manual Hooks & IOMMU Fix
         run: |
           python3 -c '
           # Injeção em fs/exec.c
@@ -60,12 +60,18 @@ jobs:
                   f.write(content)
           '
 
+          # Força a compilação do io-pgtable-fast e iommu da qcom no Makefile do IOMMU
+          cd kernel_src
+          sed -i 's/obj-$(CONFIG_QCOM_IO_PGTABLE_FAST) += io-pgtable-fast.o/obj-y += io-pgtable-fast.o/g' drivers/iommu/Makefile || true
+          
+          # Se o arquivo arm-smmu.c estiver chamando símbolos inexistentes, desativa as condicionais de fast io-pgtable nele
+          sed -i 's/CONFIG_QCOM_IO_PGTABLE_FAST/DISABLED_QCOM_IO_PGTABLE_FAST/g' drivers/iommu/arm-smmu.c || true
+
       - name: Build Kernel Image & DTB
         run: |
           cd kernel_src
           mkdir -p out
           
-          # Prioriza a combinação de configs do vendor holi/bangkk
           TARGET_DEFCONFIG=""
           for cfg in "vendor/holi-perf_defconfig" "vendor/bangkk_defconfig" "holi-perf_defconfig" "bangkk_defconfig"; do
             if [ -f "arch/arm64/configs/$cfg" ]; then
@@ -80,7 +86,6 @@ jobs:
 
           echo "Usando defconfig: $TARGET_DEFCONFIG"
 
-          # Carrega a config base
           make O=out ARCH=arm64 $TARGET_DEFCONFIG
 
           # Ajustes KernelSU
@@ -88,12 +93,6 @@ jobs:
           scripts/config --file out/.config -e OVERLAY_FS
           scripts/config --file out/.config -d KPROBES
           scripts/config --file out/.config -d HAVE_KPROBES
-
-          # Desativa extensões customizadas não compiladas da Qualcomm IOMMU para usar o driver padrão
-          scripts/config --file out/.config -d QCOM_IOMMU_UTIL
-          scripts/config --file out/.config -d CONFIG_QCOM_IOMMU_UTIL
-          scripts/config --file out/.config -d QCOM_IO_PGTABLE_FAST
-          scripts/config --file out/.config -d CONFIG_QCOM_IO_PGTABLE_FAST
 
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" olddefconfig
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" Image.gz
