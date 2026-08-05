@@ -22,15 +22,24 @@ jobs:
       - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          # Clona o repositório do KernelSU-Next direto na pasta correta
+          # Clona o repositorio do KernelSU-Next
           git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git drivers/kernelsu
 
-          # Injeta as referencias no Kconfig e Makefile principais do kernel
-          if ! grep -q "drivers/kernelsu" drivers/Kconfig; then
-            echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
-          fi
-          if ! grep -q "drivers/kernelsu" drivers/Makefile; then
-            echo 'obj-y += kernelsu/' >> drivers/Makefile
+          # Injeta a referencia apontando diretamente para a subpasta kernel/
+          if [ -d "drivers/kernelsu/kernel" ]; then
+            if ! grep -q "drivers/kernelsu" drivers/Kconfig; then
+              echo 'source "drivers/kernelsu/kernel/Kconfig"' >> drivers/Kconfig
+            fi
+            if ! grep -q "drivers/kernelsu" drivers/Makefile; then
+              echo 'obj-y += kernelsu/kernel/' >> drivers/Makefile
+            fi
+          else
+            if ! grep -q "drivers/kernelsu" drivers/Kconfig; then
+              echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+            fi
+            if ! grep -q "drivers/kernelsu" drivers/Makefile; then
+              echo 'obj-y += kernelsu/' >> drivers/Makefile
+            fi
           fi
 
       - name: Apply Manual Hooks (Legacy Kernel Patch)
