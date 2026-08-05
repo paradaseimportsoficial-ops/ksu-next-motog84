@@ -36,11 +36,15 @@ jobs:
       - name: Apply Manual Hooks (Legacy Kernel Patch)
         run: |
           cd kernel_src
+          
+          # Injeta hook limpo no fs/exec.c se ainda não existir
           if ! grep -q "ksu_handle_execve" fs/exec.c; then
-            sed -i '/setup_new_exec(bprm);/a \	extern int ksu_handle_execve(struct filename **filename_ptr); ksu_handle_execve(&bprm->filename);' fs/exec.c
+            sed -i '/setup_new_exec(bprm);/a \	{\n\t\textern int ksu_handle_execve(struct filename **filename_ptr);\n\t\tksu_handle_execve(&bprm->filename);\n\t}' fs/exec.c
           fi
+
+          # Injeta hook limpo no fs/open.c se ainda não existir
           if ! grep -q "ksu_handle_faccessat" fs/open.c; then
-            sed -i '/SYSCALL_DEFINE3(faccessat/a \	extern int ksu_handle_faccessat(int *dfd, const char __user **filename_ptr, int *mode, int *flags); ksu_handle_faccessat(&dfd, &filename, &mode, &flags);' fs/open.c
+            sed -i '/do_faccessat(int dfd,/a \	{\n\t\textern int ksu_handle_faccessat(int *dfd, const char __user **filename_ptr, int *mode, int *flags);\n\t\tksu_handle_faccessat(&dfd, &filename, &mode, &flags);\n\t}' fs/open.c
           fi
 
       - name: Build Kernel Image & DTB
@@ -71,13 +75,13 @@ jobs:
           
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" olddefconfig
           
-          # Tenta a compilacao e captura o log detalhado caso falhe
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" Image.gz || make O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" Image.gz V=1
+          # Compila o Kernel Image.gz
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" Image.gz
 
           # Compila as DTBs
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" dtbs || true
 
-          # Concatena o kernel e a DTB
+          # Concatena o kernel e a DTB no formato final da Motorola
           if [ -f "out/arch/arm64/boot/Image.gz" ]; then
             find out/arch/arm64/boot/dts/ -name "*.dtb" -exec cat {} + > out/arch/arm64/boot/dtb || touch out/arch/arm64/boot/dtb
             cat out/arch/arm64/boot/Image.gz out/arch/arm64/boot/dtb > out/arch/arm64/boot/Image.gz-dtb
