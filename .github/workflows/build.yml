@@ -79,19 +79,27 @@ jobs:
 
           echo "Usando defconfig: $TARGET_DEFCONFIG"
 
+          # Injeta as opções de IOMMU da Qualcomm direto no arquivo defconfig
+          DEFCONFIG_PATH="arch/arm64/configs/$TARGET_DEFCONFIG"
+          echo "CONFIG_QCOM_IOMMU=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_QCOM_IO_PGTABLE_FAST=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_ARM_SMMU=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_ARM_SMMU_QCOM=y" >> $DEFCONFIG_PATH
+          echo "CONFIG_MSM_IOMMU=y" >> $DEFCONFIG_PATH
+
           make O=out ARCH=arm64 $TARGET_DEFCONFIG
 
-          # Suporte KernelSU e módulos
+          # Suporte KernelSU
           scripts/config --file out/.config -e KSU
           scripts/config --file out/.config -e OVERLAY_FS
           scripts/config --file out/.config -d KPROBES
           scripts/config --file out/.config -d HAVE_KPROBES
 
-          # Ativação das dependências do IOMMU da Qualcomm
           scripts/config --file out/.config -e QCOM_IOMMU
           scripts/config --file out/.config -e QCOM_IO_PGTABLE_FAST
           scripts/config --file out/.config -e ARM_SMMU
           scripts/config --file out/.config -e ARM_SMMU_QCOM
+          scripts/config --file out/.config -e MSM_IOMMU
           
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" olddefconfig
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" Image.gz
@@ -118,4 +126,3 @@ jobs:
         with:
           name: MotoG84-KernelSU-Next-Flashable
           path: MotoG84-KernelSU-Next.zip
-
