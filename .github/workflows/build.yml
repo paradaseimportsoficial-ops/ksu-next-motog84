@@ -22,13 +22,14 @@ jobs:
       - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          # Integra o KernelSU-Next na arvore de drivers
-          curl -LSs "https://raw.githubusercontent.com/rifs2023/KernelSU-Next/next/kernel/setup.sh" | bash -s next
+          # Baixa o script oficial do KernelSU-Next de forma segura
+          curl -LSs "https://raw.githubusercontent.com/rifs2023/KernelSU-Next/next/kernel/setup.sh" -o setup.sh || curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" -o setup.sh
+          bash setup.sh next
 
       - name: Apply Manual Hooks (Legacy Kernel Patch)
         run: |
           cd kernel_src
-          # Aplica os ganchos manuais nas syscalls de execve e openat para kernels sem Kprobes
+          # Aplica os ganchos manuais nas syscalls de execve e openat
           if ! grep -q "ksu_handle_execve" fs/exec.c; then
             sed -i '/setup_new_exec(bprm);/a \	extern int ksu_handle_execve(struct filename **filename_ptr); ksu_handle_execve(&bprm->filename);' fs/exec.c
           fi
