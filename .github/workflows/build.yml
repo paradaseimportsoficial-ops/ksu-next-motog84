@@ -81,10 +81,17 @@ jobs:
 
           make O=out ARCH=arm64 $TARGET_DEFCONFIG
 
+          # Suporte KernelSU e módulos
           scripts/config --file out/.config -e KSU
           scripts/config --file out/.config -e OVERLAY_FS
           scripts/config --file out/.config -d KPROBES
           scripts/config --file out/.config -d HAVE_KPROBES
+
+          # Ativação das dependências do IOMMU da Qualcomm
+          scripts/config --file out/.config -e QCOM_IOMMU
+          scripts/config --file out/.config -e QCOM_IO_PGTABLE_FAST
+          scripts/config --file out/.config -e ARM_SMMU
+          scripts/config --file out/.config -e ARM_SMMU_QCOM
           
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" olddefconfig
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" Image.gz
@@ -111,3 +118,4 @@ jobs:
         with:
           name: MotoG84-KernelSU-Next-Flashable
           path: MotoG84-KernelSU-Next.zip
+
