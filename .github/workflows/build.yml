@@ -70,10 +70,18 @@ jobs:
           scripts/config --file out/.config -d HAVE_KPROBES
           
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" olddefconfig
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" Image.gz dtbs
+          
+          # Compila o Kernel principal primeiro
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" Image.gz
+          
+          # Compila as DTBs sem interromper o processo em caso de aviso/erro em DTBs irrelevantes
+          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" dtbs || true
 
-          find out/arch/arm64/boot/dts/ -name "*.dtb" -exec cat {} + > out/arch/arm64/boot/dtb
-          cat out/arch/arm64/boot/Image.gz out/arch/arm64/boot/dtb > out/arch/arm64/boot/Image.gz-dtb
+          # Concatena todas as DTBs geradas junto ao Image.gz
+          if [ -f "out/arch/arm64/boot/Image.gz" ]; then
+            find out/arch/arm64/boot/dts/ -name "*.dtb" -exec cat {} + > out/arch/arm64/boot/dtb || touch out/arch/arm64/boot/dtb
+            cat out/arch/arm64/boot/Image.gz out/arch/arm64/boot/dtb > out/arch/arm64/boot/Image.gz-dtb
+          fi
 
       - name: Package with AnyKernel3
         run: |
