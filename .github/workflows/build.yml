@@ -22,12 +22,13 @@ jobs:
       - name: Setup KernelSU Next Driver
         run: |
           cd kernel_src
-          # Clona o KernelSU-Next
+          # Clona o repositorio do KernelSU-Next
           git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git drivers/kernelsu
           
-          # Cria link simbolico do Kconfig caso esteja na pasta kernel/
-          if [ -f "drivers/kernelsu/kernel/Kconfig" ] && [ ! -f "drivers/kernelsu/Kconfig" ]; then
-            ln -s kernel/Kconfig drivers/kernelsu/Kconfig
+          # Ajusta a estrutura se os arquivos estiverem dentro da subpasta kernel/
+          if [ -d "drivers/kernelsu/kernel" ]; then
+            [ -f "drivers/kernelsu/kernel/Kconfig" ] && [ ! -f "drivers/kernelsu/Kconfig" ] && ln -s kernel/Kconfig drivers/kernelsu/Kconfig
+            [ -f "drivers/kernelsu/kernel/Makefile" ] && [ ! -f "drivers/kernelsu/Makefile" ] && ln -s kernel/Makefile drivers/kernelsu/Makefile
           fi
 
           # Injeta as referencias no Kconfig e Makefile principais do kernel
