@@ -13,7 +13,7 @@ jobs:
       - name: Setup Build Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev curl gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3 python3-pip
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev curl wget gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3 python3-pip
 
       - name: Clone Motorola Kernel Source
         run: |
@@ -21,18 +21,11 @@ jobs:
 
       - name: Setup KernelSU Next Driver
         run: |
-          # Clona o repositório oficial do KernelSU-Next na raiz do runner
-          git clone --depth=1 https://github.com/rifs2023/KernelSU-Next.git ksu_next_repo
-          
           cd kernel_src
-          mkdir -p drivers/kernelsu
-          
-          # Copia os fontes da pasta 'kernel' do KernelSU-Next para dentro da estrutura do kernel Motorola
-          cp -r ../ksu_next_repo/kernel/* drivers/kernelsu/
-          
-          # Injeta a referência no Makefile e Kconfig dos drivers
-          grep -q "obj-\$(CONFIG_KSU) += kernelsu/" drivers/Makefile || echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
-          grep -q 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+          # Instala o KernelSU-Next diretamente na árvore do kernel usando o script oficial
+          curl -LSs "https://raw.githubusercontent.com/rifs2023/KernelSU-Next/next/kernel/setup.sh" | bash -s next || \
+          curl -LSs "https://raw.githubusercontent.com/rifs2023/KernelSU-Next/main/kernel/setup.sh" | bash -s main || \
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
 
       - name: Build Kernel Image
         run: |
