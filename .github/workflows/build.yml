@@ -33,7 +33,7 @@ jobs:
           grep -q "drivers/kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
           grep -q "drivers/kernelsu" drivers/Makefile || echo 'obj-y += kernelsu/' >> drivers/Makefile
 
-      - name: Apply Manual Hooks & Force IOMMU Objects
+      - name: Apply Manual Hooks (Legacy Kernel Patch)
         run: |
           python3 -c '
           # Injeção em fs/exec.c
@@ -60,14 +60,6 @@ jobs:
                   f.write(content)
           '
 
-          cd kernel_src
-          # Força os arquivos contendo os símbolos ausentes a compilarem obrigatoriamente
-          echo "obj-y += io-pgtable-fast.o" >> drivers/iommu/Makefile
-          echo "obj-y += qcom-iommu.o" >> drivers/iommu/Makefile
-          
-          # Remove a chamada que tenta ligar para o fast io-pgtable dentro de arm-smmu.c se a estrutura falhar
-          sed -i 's/qcom_iommu_get_fast_iova_range/NULL;\/\//g' drivers/iommu/arm-smmu.c || true
-
       - name: Build Kernel Image & DTB
         run: |
           cd kernel_src
@@ -87,6 +79,11 @@ jobs:
 
           echo "Usando defconfig: $TARGET_DEFCONFIG"
 
+          # Remove do defconfig a chamada das funções proprietárias do IOMMU que causam erro no linker
+          DEFCONFIG_PATH="arch/arm64/configs/$TARGET_DEFCONFIG"
+          sed -i '/CONFIG_QCOM_IO_PGTABLE_FAST/d' $DEFCONFIG_PATH || true
+          echo "CONFIG_QCOM_IO_PGTABLE_FAST=n" >> $DEFCONFIG_PATH
+
           make O=out ARCH=arm64 $TARGET_DEFCONFIG
 
           # Ajustes KernelSU
@@ -95,9 +92,8 @@ jobs:
           scripts/config --file out/.config -d KPROBES
           scripts/config --file out/.config -d HAVE_KPROBES
 
-          # Garante ativação de IOMMU da Qualcomm na config final
-          scripts/config --file out/.config -e QCOM_IOMMU
-          scripts/config --file out/.config -e QCOM_IO_PGTABLE_FAST
+          # Desativa explicitamente o fast io-pgtable no .config final
+          scripts/config --file out/.config -d QCOM_IO_PGTABLE_FAST
 
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" olddefconfig
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" Image.gz
