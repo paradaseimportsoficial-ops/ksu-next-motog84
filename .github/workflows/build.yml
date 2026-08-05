@@ -33,7 +33,7 @@ jobs:
           grep -q "drivers/kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
           grep -q "drivers/kernelsu" drivers/Makefile || echo 'obj-y += kernelsu/' >> drivers/Makefile
 
-      - name: Apply Manual Hooks & IOMMU Fix
+      - name: Apply Manual Hooks & Force IOMMU Objects
         run: |
           python3 -c '
           # Injeção em fs/exec.c
@@ -60,12 +60,13 @@ jobs:
                   f.write(content)
           '
 
-          # Força a compilação do io-pgtable-fast e iommu da qcom no Makefile do IOMMU
           cd kernel_src
-          sed -i 's/obj-$(CONFIG_QCOM_IO_PGTABLE_FAST) += io-pgtable-fast.o/obj-y += io-pgtable-fast.o/g' drivers/iommu/Makefile || true
+          # Força os arquivos contendo os símbolos ausentes a compilarem obrigatoriamente
+          echo "obj-y += io-pgtable-fast.o" >> drivers/iommu/Makefile
+          echo "obj-y += qcom-iommu.o" >> drivers/iommu/Makefile
           
-          # Se o arquivo arm-smmu.c estiver chamando símbolos inexistentes, desativa as condicionais de fast io-pgtable nele
-          sed -i 's/CONFIG_QCOM_IO_PGTABLE_FAST/DISABLED_QCOM_IO_PGTABLE_FAST/g' drivers/iommu/arm-smmu.c || true
+          # Remove a chamada que tenta ligar para o fast io-pgtable dentro de arm-smmu.c se a estrutura falhar
+          sed -i 's/qcom_iommu_get_fast_iova_range/NULL;\/\//g' drivers/iommu/arm-smmu.c || true
 
       - name: Build Kernel Image & DTB
         run: |
@@ -93,6 +94,10 @@ jobs:
           scripts/config --file out/.config -e OVERLAY_FS
           scripts/config --file out/.config -d KPROBES
           scripts/config --file out/.config -d HAVE_KPROBES
+
+          # Garante ativação de IOMMU da Qualcomm na config final
+          scripts/config --file out/.config -e QCOM_IOMMU
+          scripts/config --file out/.config -e QCOM_IO_PGTABLE_FAST
 
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" olddefconfig
           make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" Image.gz
