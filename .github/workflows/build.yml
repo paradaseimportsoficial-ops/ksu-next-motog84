@@ -42,8 +42,8 @@ jobs:
           # Remove o sufixo -dirty do Git
           touch .scmversion
           
-          # Remove travas de avisos estritos (-Werror) direto dos Makefiles
-          find . -name "Makefile*" -exec sed -i 's/-Werror//g' {} + || true
+          # Desativa erros estritos no GCC do Host para evitar falhas em scripts antigos
+          export HOSTCFLAGS="-Wno-error=strict-prototypes -Wno-error=implicit-int -Wno-error=implicit-function-declaration -Wno-error=return-type"
           
           # Configuração do Defconfig
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/bangkk_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/penangf_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- defconfig
@@ -93,3 +93,4 @@ jobs:
         with:
           name: KernelSU_Next_Moto_G84_5G_Compiled
           path: boot_finished.img
+          
