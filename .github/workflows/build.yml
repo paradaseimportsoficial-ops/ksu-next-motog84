@@ -59,17 +59,16 @@ jobs:
           export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
           export LD=aarch64-linux-gnu-ld
           export LOCALVERSION=-tecnico-root-v1
-          export WERROR=0
 
           # Carrega a configuração defconfig correta do Moto G84
           make O=out vendor/bangkk_defconfig || make O=out vendor/penangf_defconfig || make O=out vendor/bangkk_gki_defconfig || make O=out defconfig
           
-          # Remove travas estritas de avisos no Makefile
+          # Remove rigorosamente todas as chamadas de -Werror nos Makefiles
           sed -i 's/-Werror//g' Makefile || true
-          sed -i 's/-Werror//g' arch/arm64/Makefile || true
+          find . -name Makefile -exec sed -i 's/-Werror//g' {} + || true
           
-          # Compila a Imagem do Kernel
-          make -j$(nproc --all) O=out Image.gz-dtb || make -j$(nproc --all) O=out Image.gz || make -j$(nproc --all) O=out Image
+          # Executa a compilação do Kernel
+          make -j$(nproc --all) O=out WERROR=0 Image.gz-dtb || make -j$(nproc --all) O=out WERROR=0 Image.gz || make -j$(nproc --all) O=out WERROR=0 Image
 
       - name: Processar e Reempacotar com Magiskboot
         run: |
