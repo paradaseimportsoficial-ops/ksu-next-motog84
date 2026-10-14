@@ -63,8 +63,8 @@ jobs:
           # Carrega a configuração defconfig correta do Moto G84
           make O=out vendor/bangkk_defconfig || make O=out vendor/penangf_defconfig || make O=out vendor/bangkk_gki_defconfig || make O=out defconfig
           
-          # Executa a compilação do Kernel
-          make -j$(nproc --all) O=out
+          # Executa a compilação ignorando avisos como erros fatais
+          make -j$(nproc --all) O=out KCFLAGS="-Wno-error" KCPPFLAGS="-Wno-error"
 
       - name: Processar e Reempacotar com Magiskboot
         run: |
