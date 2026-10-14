@@ -1,4 +1,4 @@
-name: Build KernelSU Next + SUSFS para Moto G84 5G (Android 15)
+name: Build KernelSU Next + SUSFS (Android 15 Kernel 5.4.295)
 
 on:
   workflow_dispatch:
@@ -19,6 +19,11 @@ jobs:
       - name: Baixar código-fonte do Kernel oficial da Motorola (Moto G84)
         run: |
           git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git --depth=1 android-kernel
+          cd android-kernel
+          # Atualizar a árvore para a subversão estável 5.4.295 caso o git principal esteja em revisão antiga
+          git remote add linux-stable https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git || true
+          git fetch linux-stable v5.4.295 --depth=1 || true
+          git merge FETCH_HEAD --allow-unrelated-histories -m "Update to 5.4.295" || true
 
       - name: Integrar KernelSU Next e SUSFS no código-fonte
         run: |
@@ -26,19 +31,17 @@ jobs:
           # Integrar KernelSU Next
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
           
-          # Integrar SUSFS (Aplicando o patch correspondente ao kernel 5.4)
-          # Baixa os arquivos do susfs para o diretório fs/susfs
+          # Integrar SUSFS
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-5.4 susfs_tmp || git clone https://gitlab.com/simonpunk/susfs4ksu.git susfs_tmp
           cp -r susfs_tmp/kernel_patches/fs/* fs/
           cp -r susfs_tmp/kernel_patches/include/linux/* include/linux/
           
-          # Aplica os patches de cabeçalho do SUSFS se houver script de patch
           if [ -f susfs_tmp/kernel_patches/50_add_susfs_in_gki-android14-5.4.patch ]; then
               patch -p1 < susfs_tmp/kernel_patches/50_add_susfs_in_gki-android14-5.4.patch || true
           fi
           rm -rf susfs_tmp
 
-      - name: Configurar Swap de 12GB para evitar falta de memória
+      - name: Configurar Swap de 12GB
         run: |
           sudo swapoff /swapfile || true
           sudo rm -f /swapfile
@@ -48,58 +51,49 @@ jobs:
           sudo swapon /swapfile
           free -h
 
-      - name: Compilar Kernel do Moto G84 5G com Suporte a SUSFS
+      - name: Compilar Kernel 5.4.295 para Moto G84 5G
         run: |
           cd android-kernel
           
-          # Remove o sufixo -dirty do Git
           touch .scmversion
           
-          # Desativa erros estritos no GCC do Host
           export HOSTCFLAGS="-Wno-error=strict-prototypes -Wno-error=implicit-int -Wno-error=implicit-function-declaration -Wno-error=return-type"
           
           # Configuração do Defconfig
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/bangkk_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/penangf_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- defconfig
           
-          # Habilitar flags necessárias para QCOM SCM e SUSFS no .config
+          # Habilitar SCM e KernelSU/SUSFS
           scripts/config --file out/.config --enable CONFIG_QCOM_SCM
           scripts/config --file out/.config --enable CONFIG_QCOM_SCM_DOWNLOAD_MODE
           scripts/config --file out/.config --enable CONFIG_KSU
           scripts/config --file out/.config --enable CONFIG_KSU_SUSFS
           
-          # Atualiza a configuração
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           
-          # Compilação da imagem crua (Image) otimizada
-          make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LOCALVERSION= WERROR=0 KCFLAGS="-w" Image
+          # Passar a versão exatamente compatível com o Moto Android 15
+          make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LOCALVERSION=-moto-17290-g91c2dab5855a WERROR=0 KCFLAGS="-w" Image
 
-      - name: Processar e Reempacotar com Magiskboot para Android 15
+      - name: Reempacotar boot.img do Android 15
         run: |
           mkdir -p work
           cd work
 
-          # 1. Baixar o boot.img do Android 15 do Google Drive
           gdown "https://drive.google.com/uc?id=1rJ1xb5ZgOAYiMTMa86LzMSpRUk44-D5_" -O boot_stock.img
 
-          # 2. Extrair magiskboot do APK do Magisk
           curl -L -o magisk.apk https://github.com/topjohnwu/Magisk/releases/download/v26.1/Magisk-v26.1.apk
           unzip -q magisk.apk
           cp lib/x86_64/libmagiskboot.so ./magiskboot
           chmod +x magiskboot
 
-          # 3. Descompactar o boot.img original do Android 15 (preservando ramdisk e bootconfig)
           ./magiskboot unpack boot_stock.img
 
-          # 4. Substituir estritamente o arquivo de kernel binário pelo Image compilado do zero
           cp ../android-kernel/out/arch/arm64/boot/Image kernel
 
-          # 5. Reempacotar preservando os headers exatos do Android 15
           ./magiskboot repack boot_stock.img boot_finished.img
           cp boot_finished.img ../boot_finished.img
 
-      - name: Anexar Artefato (boot.img Final Compilado - Android 15 com SUSFS)
+      - name: Anexar Artefato Final (Android 15 - 5.4.295)
         uses: actions/upload-artifact@v4
         with:
-          name: KernelSU_Next_SUSFS_Moto_G84_Android15
+          name: KernelSU_Next_SUSFS_Moto_G84_A15_v295
           path: boot_finished.img
-          
