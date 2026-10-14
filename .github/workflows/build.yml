@@ -1,4 +1,4 @@
-name: Build KernelSU Next do Zero para Moto G84 5G
+name: Build KernelSU Next do Zero para Moto G84 5G (Android 15)
 
 on:
   workflow_dispatch:
@@ -48,22 +48,22 @@ jobs:
           # Configuração do Defconfig
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/bangkk_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/penangf_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- defconfig
           
-          # Garante que as dependências SCM da Qualcomm estejam habilitadas no .config gerado
+          # Garante dependências SCM da Qualcomm exigidas pelas versões recentes
           scripts/config --file out/.config --enable CONFIG_QCOM_SCM
           scripts/config --file out/.config --enable CONFIG_QCOM_SCM_DOWNLOAD_MODE
           
-          # Atualiza a configuração com as dependências resolvidas
+          # Atualiza a configuração
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           
-          # Compilação final do Kernel
-          make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LOCALVERSION=-tecnico-root-v1 WERROR=0 KCFLAGS="-w" Image.gz-dtb || make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LOCALVERSION=-tecnico-root-v1 WERROR=0 KCFLAGS="-w" Image.gz || make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LOCALVERSION=-tecnico-root-v1 WERROR=0 KCFLAGS="-w" Image
+          # Compilação da imagem crua (Image) ideal para o bootloader do Android 15
+          make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LOCALVERSION= WERROR=0 KCFLAGS="-w" Image
 
-      - name: Processar e Reempacotar com Magiskboot
+      - name: Processar e Reempacotar com Magiskboot para Android 15
         run: |
           mkdir -p work
           cd work
 
-          # 1. Baixar o boot.img da ROM Stomo do Google Drive
+          # 1. Baixar o boot.img da ROM (Android 15) do Google Drive
           gdown "https://drive.google.com/uc?id=1rJ1xb5ZgOAYiMTMa86LzMSpRUk44-D5_" -O boot_stock.img
 
           # 2. Extrair magiskboot do APK do Magisk
@@ -72,31 +72,19 @@ jobs:
           cp lib/x86_64/libmagiskboot.so ./magiskboot
           chmod +x magiskboot
 
-          # 3. Descompactar o boot.img original
+          # 3. Descompactar o boot.img original do Android 15
           ./magiskboot unpack boot_stock.img
 
-          # 4. Localizar a imagem compilada
-          COMPILED_IMAGE=$(find ../android-kernel/out/arch/arm64/boot -name "Image.gz-dtb" -o -name "Image.gz" -o -name "Image" | head -n 1)
-          echo "Kernel compilado encontrado em: $COMPILED_IMAGE"
+          # 4. Substituir pelo novo kernel compilado bruto
+          cp ../android-kernel/out/arch/arm64/boot/Image kernel
 
-          # 5. Identificar o formato do kernel original e substituir
-          KERNEL_FMT=$(file kernel | grep -o -E 'LZ4|gzip|raw' || echo "raw")
-          echo "Formato detectado do kernel original: $KERNEL_FMT"
-
-          if [[ "$KERNEL_FMT" == *"LZ4"* ]]; then
-             lz4 -c -12 "$COMPILED_IMAGE" > kernel
-          elif [[ "$KERNEL_FMT" == *"gzip"* ]]; then
-             gzip -c -9 "$COMPILED_IMAGE" > kernel
-          else
-             cp "$COMPILED_IMAGE" kernel
-          fi
-
-          # 6. Reempacotar o boot.img final
+          # 5. Reempacotar preservando os parâmetros e o bootconfig do Android 15
           ./magiskboot repack boot_stock.img boot_finished.img
           cp boot_finished.img ../boot_finished.img
 
-      - name: Anexar Artefato (boot.img Final Compilado)
+      - name: Anexar Artefato (boot.img Final Compilado - Android 15)
         uses: actions/upload-artifact@v4
         with:
-          name: KernelSU_Next_Moto_G84_5G_Compiled
+          name: KernelSU_Next_Moto_G84_5G_Android15
           path: boot_finished.img
+          
