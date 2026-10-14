@@ -1,4 +1,4 @@
-name: Build KernelSU Next do Zero para Moto G84 5G (penangf)
+name: Build KernelSU Next do Zero para Moto G84 5G (bangkk)
 
 on:
   workflow_dispatch:
@@ -23,9 +23,9 @@ jobs:
           git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 --depth=1 -b master-kernel-build-2022 clang-standalone
           cd ..
 
-      - name: Baixar código-fonte do Kernel oficial da Motorola (Moto G84 - penangf)
+      - name: Baixar código-fonte do Kernel oficial da Motorola (Moto G84 - bangkk)
         run: |
-          git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git -b android-13.0/M3SCS33.36-12-1 --depth=1 android-kernel
+          git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git -b android-13.0/bangkk --depth=1 android-kernel || git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git -b android-13.0/M3SCS33.36-12-1 --depth=1 android-kernel
 
       - name: Integrar KernelSU Next no código-fonte
         run: |
@@ -60,8 +60,8 @@ jobs:
           export LLVM_IAS=1
           export LOCALVERSION=-tecnico-root-v1
 
-          # Carrega a configuração defconfig do Moto G84
-          make O=out vendor/penangf_defconfig
+          # Carrega a configuração defconfig do Moto G84 (bangkk)
+          make O=out vendor/bangkk_defconfig || make O=out vendor/bangkk_gki_defconfig || make O=out vendor/penangf_defconfig
           
           # Executa a compilação do Kernel
           make -j$(nproc --all) O=out
