@@ -13,7 +13,7 @@ jobs:
       - name: Configurar ambiente e ferramentas de compilação
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev lld clang
           pip3 install gdown
 
       - name: Baixar Toolchain (Clang/LLVM do Android)
@@ -25,7 +25,6 @@ jobs:
 
       - name: Baixar código-fonte do Kernel oficial da Motorola (Moto G84)
         run: |
-          # Clona a fonte do kernel msm sem travar em nome de branch antiga
           git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git --depth=1 android-kernel
 
       - name: Integrar KernelSU Next no código-fonte
@@ -50,19 +49,19 @@ jobs:
           # Remove o sufixo -dirty do Git
           touch .scmversion
           
-          # Configura os caminhos do compilador Clang
-          export PATH="$(pwd)/../toolchain/clang-standalone/clang-r450784d/bin:$PATH"
+          # Configura os caminhos do compilador e ferramentas LLVM/Clang
+          TOOLCHAIN_BIN="$(pwd)/../toolchain/clang-standalone/clang-r450784d/bin"
+          export PATH="$TOOLCHAIN_BIN:/usr/bin:$PATH"
           export ARCH=arm64
           export SUBARCH=arm64
           export CC=clang
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          export LLVM=1
-          export LLVM_IAS=1
+          export LD=ld.lld
           export LOCALVERSION=-tecnico-root-v1
 
-          # Tenta carregar a configuração defconfig correta do Moto G84
-          make O=out vendor/penangf_defconfig || make O=out vendor/bangkk_defconfig || make O=out vendor/penang_defconfig
+          # Carrega a configuração defconfig do Moto G84
+          make O=out vendor/bangkk_defconfig || make O=out vendor/penangf_defconfig || make O=out vendor/bangkk_gki_defconfig || make O=out defconfig
           
           # Executa a compilação do Kernel
           make -j$(nproc --all) O=out
