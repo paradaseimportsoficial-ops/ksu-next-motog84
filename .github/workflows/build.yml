@@ -1,4 +1,4 @@
-name: Build KernelSU Next do Zero para Moto G84 5G (bangkk)
+name: Build KernelSU Next do Zero para Moto G84 5G
 
 on:
   workflow_dispatch:
@@ -23,9 +23,10 @@ jobs:
           git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 --depth=1 -b master-kernel-build-2022 clang-standalone
           cd ..
 
-      - name: Baixar código-fonte do Kernel oficial da Motorola (Moto G84 - bangkk)
+      - name: Baixar código-fonte do Kernel oficial da Motorola (Moto G84)
         run: |
-          git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git -b android-13.0/bangkk --depth=1 android-kernel || git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git -b android-13.0/M3SCS33.36-12-1 --depth=1 android-kernel
+          # Clona a fonte do kernel msm sem travar em nome de branch antiga
+          git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git --depth=1 android-kernel
 
       - name: Integrar KernelSU Next no código-fonte
         run: |
@@ -60,8 +61,8 @@ jobs:
           export LLVM_IAS=1
           export LOCALVERSION=-tecnico-root-v1
 
-          # Carrega a configuração defconfig do Moto G84 (bangkk)
-          make O=out vendor/bangkk_defconfig || make O=out vendor/bangkk_gki_defconfig || make O=out vendor/penangf_defconfig
+          # Tenta carregar a configuração defconfig correta do Moto G84
+          make O=out vendor/penangf_defconfig || make O=out vendor/bangkk_defconfig || make O=out vendor/penang_defconfig
           
           # Executa a compilação do Kernel
           make -j$(nproc --all) O=out
@@ -71,7 +72,7 @@ jobs:
           mkdir -p work
           cd work
 
-          # 1. Baixar o boot.img do Moto G84 do Google Drive
+          # 1. Baixar o boot.img da ROM Stomo do Google Drive
           gdown "https://drive.google.com/uc?id=1rJ1xb5ZgOAYiMTMa86LzMSpRUk44-D5_" -O boot_stock.img
 
           # 2. Extrair magiskboot do APK do Magisk
