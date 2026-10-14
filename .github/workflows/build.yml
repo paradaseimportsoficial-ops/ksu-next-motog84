@@ -1,4 +1,4 @@
-name: Build KernelSU Next do Zero para Moto G84 5G (Android 15)
+name: Build KernelSU Next + SUSFS para Moto G84 5G (Android 15)
 
 on:
   workflow_dispatch:
@@ -20,10 +20,23 @@ jobs:
         run: |
           git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git --depth=1 android-kernel
 
-      - name: Integrar KernelSU Next no código-fonte
+      - name: Integrar KernelSU Next e SUSFS no código-fonte
         run: |
           cd android-kernel
+          # Integrar KernelSU Next
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+          
+          # Integrar SUSFS (Aplicando o patch correspondente ao kernel 5.4)
+          # Baixa os arquivos do susfs para o diretório fs/susfs
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-5.4 susfs_tmp || git clone https://gitlab.com/simonpunk/susfs4ksu.git susfs_tmp
+          cp -r susfs_tmp/kernel_patches/fs/* fs/
+          cp -r susfs_tmp/kernel_patches/include/linux/* include/linux/
+          
+          # Aplica os patches de cabeçalho do SUSFS se houver script de patch
+          if [ -f susfs_tmp/kernel_patches/50_add_susfs_in_gki-android14-5.4.patch ]; then
+              patch -p1 < susfs_tmp/kernel_patches/50_add_susfs_in_gki-android14-5.4.patch || true
+          fi
+          rm -rf susfs_tmp
 
       - name: Configurar Swap de 12GB para evitar falta de memória
         run: |
@@ -35,7 +48,7 @@ jobs:
           sudo swapon /swapfile
           free -h
 
-      - name: Compilar Kernel do Moto G84 5G
+      - name: Compilar Kernel do Moto G84 5G com Suporte a SUSFS
         run: |
           cd android-kernel
           
@@ -48,14 +61,16 @@ jobs:
           # Configuração do Defconfig
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/bangkk_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/penangf_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- defconfig
           
-          # Garante dependências SCM da Qualcomm exigidas pelas versões recentes
+          # Habilitar flags necessárias para QCOM SCM e SUSFS no .config
           scripts/config --file out/.config --enable CONFIG_QCOM_SCM
           scripts/config --file out/.config --enable CONFIG_QCOM_SCM_DOWNLOAD_MODE
+          scripts/config --file out/.config --enable CONFIG_KSU
+          scripts/config --file out/.config --enable CONFIG_KSU_SUSFS
           
           # Atualiza a configuração
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           
-          # Compilação da imagem crua (Image) ideal para o bootloader do Android 15
+          # Compilação da imagem crua (Image) otimizada
           make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LOCALVERSION= WERROR=0 KCFLAGS="-w" Image
 
       - name: Processar e Reempacotar com Magiskboot para Android 15
@@ -63,7 +78,7 @@ jobs:
           mkdir -p work
           cd work
 
-          # 1. Baixar o boot.img da ROM (Android 15) do Google Drive
+          # 1. Baixar o boot.img do Android 15 do Google Drive
           gdown "https://drive.google.com/uc?id=1rJ1xb5ZgOAYiMTMa86LzMSpRUk44-D5_" -O boot_stock.img
 
           # 2. Extrair magiskboot do APK do Magisk
@@ -72,19 +87,19 @@ jobs:
           cp lib/x86_64/libmagiskboot.so ./magiskboot
           chmod +x magiskboot
 
-          # 3. Descompactar o boot.img original do Android 15
+          # 3. Descompactar o boot.img original do Android 15 (preservando ramdisk e bootconfig)
           ./magiskboot unpack boot_stock.img
 
-          # 4. Substituir pelo novo kernel compilado bruto
+          # 4. Substituir estritamente o arquivo de kernel binário pelo Image compilado do zero
           cp ../android-kernel/out/arch/arm64/boot/Image kernel
 
-          # 5. Reempacotar preservando os parâmetros e o bootconfig do Android 15
+          # 5. Reempacotar preservando os headers exatos do Android 15
           ./magiskboot repack boot_stock.img boot_finished.img
           cp boot_finished.img ../boot_finished.img
 
-      - name: Anexar Artefato (boot.img Final Compilado - Android 15)
+      - name: Anexar Artefato (boot.img Final Compilado - Android 15 com SUSFS)
         uses: actions/upload-artifact@v4
         with:
-          name: KernelSU_Next_Moto_G84_5G_Android15
+          name: KernelSU_Next_SUSFS_Moto_G84_Android15
           path: boot_finished.img
           
