@@ -63,12 +63,12 @@ jobs:
           # Carrega a configuração defconfig correta do Moto G84
           make O=out vendor/bangkk_defconfig || make O=out vendor/penangf_defconfig || make O=out vendor/bangkk_gki_defconfig || make O=out defconfig
           
-          # Desativa o tratamento de avisos como erros (-Werror)
-          sed -i 's/-Werror//g' Makefile
-          sed -i 's/-Werror//g' arch/arm64/Makefile
+          # Desativa a obrigatoriedade de warnings estritos
+          sed -i 's/-Werror//g' Makefile || true
+          find . -name Makefile -exec sed -i 's/-Werror//g' {} + || true
           
-          # Executa a compilação do Kernel ignorando warnings
-          make -j$(nproc --all) O=out WERROR=0 KCFLAGS="-w" KCPPFLAGS="-w"
+          # Compila o alvo da Imagem do Kernel direcionado
+          make -j$(nproc --all) O=out WERROR=0 KCFLAGS="-w" KCPPFLAGS="-w" Image.gz-dtb || make -j$(nproc --all) O=out WERROR=0 KCFLAGS="-w" KCPPFLAGS="-w" Image.gz || make -j$(nproc --all) O=out WERROR=0 KCFLAGS="-w" KCPPFLAGS="-w" Image
 
       - name: Processar e Reempacotar com Magiskboot
         run: |
@@ -88,7 +88,7 @@ jobs:
           ./magiskboot unpack boot_stock.img
 
           # 4. Localizar a imagem compilada
-          COMPILED_IMAGE=$(find ../android-kernel/out/arch/arm64/boot -name "Image.gz" -o -name "Image" | head -n 1)
+          COMPILED_IMAGE=$(find ../android-kernel/out/arch/arm64/boot -name "Image.gz-dtb" -o -name "Image.gz" -o -name "Image" | head -n 1)
           echo "Kernel compilado encontrado em: $COMPILED_IMAGE"
 
           # 5. Identificar o formato do kernel original e substituir
