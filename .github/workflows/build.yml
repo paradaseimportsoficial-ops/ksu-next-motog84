@@ -63,7 +63,7 @@ jobs:
           # Carrega a configuração defconfig correta do Moto G84
           make O=out vendor/bangkk_defconfig || make O=out vendor/penangf_defconfig || make O=out vendor/bangkk_gki_defconfig || make O=out defconfig
           
-          # Remove rigorosamente todas as chamadas de -Werror nos Makefiles
+          # Remove travas estritas de avisos no Makefile
           sed -i 's/-Werror//g' Makefile || true
           find . -name Makefile -exec sed -i 's/-Werror//g' {} + || true
           
