@@ -5,7 +5,7 @@ on:
 
 jobs:
   build-kernel:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Baixar o código do repositório
         uses: actions/checkout@v4
@@ -52,23 +52,16 @@ jobs:
           # Configura os caminhos do compilador e ferramentas
           TOOLCHAIN_BIN="$(pwd)/../toolchain/clang-standalone/clang-r450784d/bin"
           export PATH="$TOOLCHAIN_BIN:/usr/bin:$PATH"
-          export ARCH=arm64
-          export SUBARCH=arm64
-          export CC=clang
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          export LD=aarch64-linux-gnu-ld
-          export LOCALVERSION=-tecnico-root-v1
-
-          # Carrega a configuração defconfig correta do Moto G84
-          make O=out vendor/bangkk_defconfig || make O=out vendor/penangf_defconfig || make O=out vendor/bangkk_gki_defconfig || make O=out defconfig
           
-          # Remove travas estritas de avisos no Makefile
-          sed -i 's/-Werror//g' Makefile || true
-          find . -name Makefile -exec sed -i 's/-Werror//g' {} + || true
+          # Remove rigorosamente todas as chamadas de -Werror nos Makefiles
+          find . -name "Makefile*" -exec sed -i 's/-Werror//g' {} + || true
+          sed -i 's/ -Werror//g' Makefile || true
+          
+          # Configuração e Compilação
+          make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/bangkk_defconfig || make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/penangf_defconfig || make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- defconfig
           
           # Executa a compilação do Kernel
-          make -j$(nproc --all) O=out WERROR=0 Image.gz-dtb || make -j$(nproc --all) O=out WERROR=0 Image.gz || make -j$(nproc --all) O=out WERROR=0 Image
+          make -j$(nproc --all) O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LOCALVERSION=-tecnico-root-v1 WERROR=0 Image.gz-dtb || make -j$(nproc --all) O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LOCALVERSION=-tecnico-root-v1 WERROR=0 Image.gz || make -j$(nproc --all) O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LOCALVERSION=-tecnico-root-v1 WERROR=0 Image
 
       - name: Processar e Reempacotar com Magiskboot
         run: |
