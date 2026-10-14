@@ -13,7 +13,7 @@ jobs:
       - name: Configurar ambiente e ferramentas de compilação
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev lld clang
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev lld clang gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
           pip3 install gdown
 
       - name: Baixar Toolchain (Clang/LLVM do Android)
@@ -49,7 +49,7 @@ jobs:
           # Remove o sufixo -dirty do Git
           touch .scmversion
           
-          # Configura os caminhos do compilador e ferramentas LLVM/Clang
+          # Configura os caminhos do compilador e ferramentas
           TOOLCHAIN_BIN="$(pwd)/../toolchain/clang-standalone/clang-r450784d/bin"
           export PATH="$TOOLCHAIN_BIN:/usr/bin:$PATH"
           export ARCH=arm64
@@ -57,10 +57,10 @@ jobs:
           export CC=clang
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          export LD=ld.lld
+          export LD=aarch64-linux-gnu-ld
           export LOCALVERSION=-tecnico-root-v1
 
-          # Carrega a configuração defconfig do Moto G84
+          # Carrega a configuração defconfig correta do Moto G84
           make O=out vendor/bangkk_defconfig || make O=out vendor/penangf_defconfig || make O=out vendor/bangkk_gki_defconfig || make O=out defconfig
           
           # Executa a compilação do Kernel
