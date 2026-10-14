@@ -1,129 +1,111 @@
-name: Build KernelSU Next (Legacy 5.4 Fix) - Moto G84
+name: Build KernelSU Next do Zero para Moto G84 5G (penangf)
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-kernel:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Baixar o código do repositório
         uses: actions/checkout@v4
 
-      - name: Setup Build Environment
+      - name: Configurar ambiente e ferramentas de compilação
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses-dev git zip llvm clang libelf-dev curl wget gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi python3 python3-pip
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev
+          pip3 install gdown
 
-      - name: Clone Motorola Kernel Source
+      - name: Baixar Toolchain (Clang/LLVM do Android)
         run: |
-          git clone --depth=1 https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel_src
+          mkdir -p toolchain
+          cd toolchain
+          git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 --depth=1 -b master-kernel-build-2022 clang-standalone
+          cd ..
 
-      - name: Setup KernelSU Next Driver
+      - name: Baixar código-fonte do Kernel oficial da Motorola (Moto G84 - penangf)
         run: |
-          cd kernel_src
-          rm -rf drivers/kernelsu
-          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git drivers/kernelsu
-          rm -rf drivers/kernelsu/.git
+          git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git -b android-13.0/M3SCS33.36-12-1 --depth=1 android-kernel
 
-          if [ -d "drivers/kernelsu/kernel" ]; then
-            cp -r drivers/kernelsu/kernel/* drivers/kernelsu/
-          fi
-
-          grep -q "drivers/kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
-          grep -q "drivers/kernelsu" drivers/Makefile || echo 'obj-y += kernelsu/' >> drivers/Makefile
-
-      - name: Apply Manual Hooks & Inject Dedicated Linker Stubs
+      - name: Integrar KernelSU Next no código-fonte
         run: |
-          python3 -c '
-          # Injeção em fs/exec.c
-          with open("kernel_src/fs/exec.c", "r") as f:
-              content = f.read()
-          if "ksu_handle_execve" not in content:
-              target = "setup_new_exec(bprm);"
-              patch = "setup_new_exec(bprm);\n\t{\n\t\textern int ksu_handle_execve(struct filename **filename_ptr);\n\t\tksu_handle_execve(&bprm->filename);\n\t}"
-              content = content.replace(target, patch, 1)
-              with open("kernel_src/fs/exec.c", "w") as f:
-                  f.write(content)
+          cd android-kernel
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
 
-          # Injeção em fs/open.c
-          with open("kernel_src/fs/open.c", "r") as f:
-              content = f.read()
-          if "ksu_handle_faccessat" not in content:
-              target = "SYSCALL_DEFINE3(faccessat,"
-              patch = "extern int ksu_handle_faccessat(int *dfd, const char __user **filename_ptr, int *mode, int *flags);\nSYSCALL_DEFINE3(faccessat,"
-              content = content.replace(target, patch, 1)
-              target2 = "return do_faccessat(dfd, filename, mode);"
-              patch2 = "ksu_handle_faccessat(&dfd, &filename, &mode, NULL);\n\treturn do_faccessat(dfd, filename, mode);"
-              content = content.replace(target2, patch2, 1)
-              with open("kernel_src/fs/open.c", "w") as f:
-                  f.write(content)
-
-          # Criar um arquivo C dedicado para os stubs da Qualcomm IOMMU
-          stub_code = """#include <linux/types.h>
-          #include <linux/device.h>
-
-          void *qcom_alloc_io_pgtable_ops(int fmt, void *cfg, void *cookie) { return (void*)0; }
-          void qcom_free_io_pgtable_ops(void *ops) {}
-          int qcom_iommu_get_fast_iova_range(struct device *dev, void *p) { return -1; }
-          int qcom_iommu_generate_resv_regions(struct device *dev, void *list) { return 0; }
-          """
-          with open("kernel_src/drivers/iommu/qcom_stubs.c", "w") as f:
-              f.write(stub_code)
-          '
-
-          # Adicionar o objeto de stubs diretamente ao Makefile para ser compilado como qcom_stubs.o
-          echo "obj-y += qcom_stubs.o" >> kernel_src/drivers/iommu/Makefile
-
-      - name: Build Kernel Image & DTB
+      - name: Configurar Swap de 12GB para evitar falta de memória
         run: |
-          cd kernel_src
-          mkdir -p out
+          sudo swapoff /swapfile || true
+          sudo rm -f /swapfile
+          sudo fallocate -l 12G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+
+      - name: Compilar Kernel do Moto G84 5G
+        run: |
+          cd android-kernel
           
-          TARGET_DEFCONFIG=""
-          for cfg in "vendor/holi-perf_defconfig" "vendor/bangkk_defconfig" "holi-perf_defconfig" "bangkk_defconfig"; do
-            if [ -f "arch/arm64/configs/$cfg" ]; then
-              TARGET_DEFCONFIG="$cfg"
-              break
-            fi
-          done
-
-          if [ -z "$TARGET_DEFCONFIG" ]; then
-            TARGET_DEFCONFIG=$(find arch/arm64/configs/ -name "*defconfig" | head -n 1 | sed 's|arch/arm64/configs/||')
-          fi
-
-          echo "Usando defconfig: $TARGET_DEFCONFIG"
-
-          make O=out ARCH=arm64 $TARGET_DEFCONFIG
-
-          # Ajustes KernelSU
-          scripts/config --file out/.config -e KSU
-          scripts/config --file out/.config -e OVERLAY_FS
-          scripts/config --file out/.config -d KPROBES
-          scripts/config --file out/.config -d HAVE_KPROBES
-
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" olddefconfig
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" Image.gz
-          make -j$(nproc) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-Wno-error" dtbs || true
-
-          if [ -f "out/arch/arm64/boot/Image.gz" ]; then
-            find out/arch/arm64/boot/dts/ -name "*.dtb" -exec cat {} + > out/arch/arm64/boot/dtb || touch out/arch/arm64/boot/dtb
-            cat out/arch/arm64/boot/Image.gz out/arch/arm64/boot/dtb > out/arch/arm64/boot/Image.gz-dtb
-          fi
-
-      - name: Package with AnyKernel3
-        run: |
-          git clone https://github.com/osm0sis/AnyKernel3 --depth=1 AnyKernel3
-          rm -rf AnyKernel3/.git
-          cp kernel_src/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/Image.gz-dtb
+          # Remove o sufixo -dirty do Git
+          touch .scmversion
           
-          cd AnyKernel3
-          sed -i 's/block=auto/block=\/dev\/block\/bootdevice\/by-name\/boot/g' anykernel.sh
-          sed -i 's/is_slot_device=auto/is_slot_device=1/g' anykernel.sh
-          zip -r9 ../MotoG84-KernelSU-Next.zip * -x README.md
+          # Configura os caminhos do compilador Clang
+          export PATH="$(pwd)/../toolchain/clang-standalone/clang-r450784d/bin:$PATH"
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CC=clang
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+          export LLVM=1
+          export LLVM_IAS=1
+          export LOCALVERSION=-tecnico-root-v1
 
-      - name: Upload Kernel Artifacts
+          # Carrega a configuração defconfig do Moto G84
+          make O=out vendor/penangf_defconfig
+          
+          # Executa a compilação do Kernel
+          make -j$(nproc --all) O=out
+
+      - name: Processar e Reempacotar com Magiskboot
+        run: |
+          mkdir -p work
+          cd work
+
+          # 1. Baixar o boot.img do Moto G84 do Google Drive
+          gdown "https://drive.google.com/uc?id=1rJ1xb5ZgOAYiMTMa86LzMSpRUk44-D5_" -O boot_stock.img
+
+          # 2. Extrair magiskboot do APK do Magisk
+          curl -L -o magisk.apk https://github.com/topjohnwu/Magisk/releases/download/v26.1/Magisk-v26.1.apk
+          unzip -q magisk.apk
+          cp lib/x86_64/libmagiskboot.so ./magiskboot
+          chmod +x magiskboot
+
+          # 3. Descompactar o boot.img original
+          ./magiskboot unpack boot_stock.img
+
+          # 4. Localizar a imagem compilada
+          COMPILED_IMAGE=$(find ../android-kernel/out/arch/arm64/boot -name "Image.gz" -o -name "Image" | head -n 1)
+          echo "Kernel compilado encontrado em: $COMPILED_IMAGE"
+
+          # 5. Identificar o formato do kernel original e substituir
+          KERNEL_FMT=$(file kernel | grep -o -E 'LZ4|gzip|raw' || echo "raw")
+          echo "Formato detectado do kernel original: $KERNEL_FMT"
+
+          if [[ "$KERNEL_FMT" == *"LZ4"* ]]; then
+             lz4 -c -12 "$COMPILED_IMAGE" > kernel
+          elif [[ "$KERNEL_FMT" == *"gzip"* ]]; then
+             gzip -c -9 "$COMPILED_IMAGE" > kernel
+          else
+             cp "$COMPILED_IMAGE" kernel
+          fi
+
+          # 6. Reempacotar o boot.img final
+          ./magiskboot repack boot_stock.img boot_finished.img
+          cp boot_finished.img ../boot_finished.img
+
+      - name: Anexar Artefato (boot.img Final Compilado)
         uses: actions/upload-artifact@v4
         with:
-          name: MotoG84-KernelSU-Next-Flashable
-          path: MotoG84-KernelSU-Next.zip
+          name: KernelSU_Next_Moto_G84_5G_Compiled
+          path: boot_finished.img
+          
