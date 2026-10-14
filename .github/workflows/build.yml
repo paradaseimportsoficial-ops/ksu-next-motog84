@@ -48,7 +48,14 @@ jobs:
           # Configuração do Defconfig
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/bangkk_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/penangf_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- defconfig
           
-          # Compilação do Kernel com supressão total de warnings em drivers genéricos
+          # Garante que as dependências SCM da Qualcomm estejam habilitadas no .config gerado
+          scripts/config --file out/.config --enable CONFIG_QCOM_SCM
+          scripts/config --file out/.config --enable CONFIG_QCOM_SCM_DOWNLOAD_MODE
+          
+          # Atualiza a configuração com as dependências resolvidas
+          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+          
+          # Compilação final do Kernel
           make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LOCALVERSION=-tecnico-root-v1 WERROR=0 KCFLAGS="-w" Image.gz-dtb || make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LOCALVERSION=-tecnico-root-v1 WERROR=0 KCFLAGS="-w" Image.gz || make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LOCALVERSION=-tecnico-root-v1 WERROR=0 KCFLAGS="-w" Image
 
       - name: Processar e Reempacotar com Magiskboot
@@ -93,4 +100,3 @@ jobs:
         with:
           name: KernelSU_Next_Moto_G84_5G_Compiled
           path: boot_finished.img
-          
