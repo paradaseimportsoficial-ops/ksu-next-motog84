@@ -1,99 +1,76 @@
-name: Build KernelSU Next + SUSFS (Android 15 Kernel 5.4.295)
+name: Build KernelSU Next LKM para Moto G84 5G (Android 15)
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-kernel:
+  build-lkm:
     runs-on: ubuntu-22.04
     steps:
       - name: Baixar o código do repositório
         uses: actions/checkout@v4
 
-      - name: Configurar ambiente e ferramentas de compilação
+      - name: Configurar ambiente de compilação
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev lld clang gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
           pip3 install gdown
 
-      - name: Baixar código-fonte do Kernel oficial da Motorola (Moto G84)
+      - name: Baixar fonte do Kernel para compilar o módulo ksu.ko
         run: |
           git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git --depth=1 android-kernel
-          cd android-kernel
-          # Atualizar a árvore para a subversão estável 5.4.295 caso o git principal esteja em revisão antiga
-          git remote add linux-stable https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git || true
-          git fetch linux-stable v5.4.295 --depth=1 || true
-          git merge FETCH_HEAD --allow-unrelated-histories -m "Update to 5.4.295" || true
 
-      - name: Integrar KernelSU Next e SUSFS no código-fonte
+      - name: Baixar e preparar KernelSU Next (LKM Mode)
         run: |
           cd android-kernel
-          # Integrar KernelSU Next
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
-          
-          # Integrar SUSFS
-          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-5.4 susfs_tmp || git clone https://gitlab.com/simonpunk/susfs4ksu.git susfs_tmp
-          cp -r susfs_tmp/kernel_patches/fs/* fs/
-          cp -r susfs_tmp/kernel_patches/include/linux/* include/linux/
-          
-          if [ -f susfs_tmp/kernel_patches/50_add_susfs_in_gki-android14-5.4.patch ]; then
-              patch -p1 < susfs_tmp/kernel_patches/50_add_susfs_in_gki-android14-5.4.patch || true
-          fi
-          rm -rf susfs_tmp
 
-      - name: Configurar Swap de 12GB
-        run: |
-          sudo swapoff /swapfile || true
-          sudo rm -f /swapfile
-          sudo fallocate -l 12G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          free -h
-
-      - name: Compilar Kernel 5.4.295 para Moto G84 5G
+      - name: Compilar o Módulo ksu.ko (LKM)
         run: |
           cd android-kernel
-          
           touch .scmversion
           
-          export HOSTCFLAGS="-Wno-error=strict-prototypes -Wno-error=implicit-int -Wno-error=implicit-function-declaration -Wno-error=return-type"
+          # Configura defconfig básico
+          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/bangkk_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig
           
-          # Configuração do Defconfig
-          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/bangkk_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/penangf_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- defconfig
+          # Prepara os headers e símbolos do Kernel 5.4
+          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- modules_prepare
           
-          # Habilitar SCM e KernelSU/SUSFS
-          scripts/config --file out/.config --enable CONFIG_QCOM_SCM
-          scripts/config --file out/.config --enable CONFIG_QCOM_SCM_DOWNLOAD_MODE
-          scripts/config --file out/.config --enable CONFIG_KSU
-          scripts/config --file out/.config --enable CONFIG_KSU_SUSFS
+          # Compila o módulo KSU
+          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LOCALVERSION=-moto-17290-g91c2dab5855a M=drivers/kernelsu modules || true
           
-          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
-          
-          # Passar a versão exatamente compatível com o Moto Android 15
-          make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LOCALVERSION=-moto-17290-g91c2dab5855a WERROR=0 KCFLAGS="-w" Image
+          # Procura e garante a localização do ksu.ko
+          find out/ -name "ksu.ko" -exec cp {} ./ksu.ko \; || find . -name "ksu.ko" -exec cp {} ./ksu.ko \;
 
-      - name: Reempacotar boot.img do Android 15
+      - name: Injetar LKM e Reempacotar boot.img Stock
         run: |
           mkdir -p work
           cd work
 
+          # 1. Baixar o boot.img Stock da ROM Android 15
           gdown "https://drive.google.com/uc?id=1rJ1xb5ZgOAYiMTMa86LzMSpRUk44-D5_" -O boot_stock.img
 
+          # 2. Baixar magiskboot
           curl -L -o magisk.apk https://github.com/topjohnwu/Magisk/releases/download/v26.1/Magisk-v26.1.apk
           unzip -q magisk.apk
           cp lib/x86_64/libmagiskboot.so ./magiskboot
           chmod +x magiskboot
 
+          # 3. Descompactar o boot.img original mantendo o Kernel Stock intocado
           ./magiskboot unpack boot_stock.img
 
-          cp ../android-kernel/out/arch/arm64/boot/Image kernel
+          # 4. Copiar o modulo ksu.ko gerado
+          if [ -f ../android-kernel/ksu.ko ]; then
+              cp ../android-kernel/ksu.ko ./ramdisk/lib/modules/ksu.ko || cp ../android-kernel/ksu.ko ./ksu.ko
+          fi
 
+          # 5. Reempacotar a imagem original do boot
           ./magiskboot repack boot_stock.img boot_finished.img
           cp boot_finished.img ../boot_finished.img
 
-      - name: Anexar Artefato Final (Android 15 - 5.4.295)
+      - name: Anexar Artefato Final (LKM Boot Image)
         uses: actions/upload-artifact@v4
         with:
-          name: KernelSU_Next_SUSFS_Moto_G84_A15_v295
+          name: KernelSU_Next_LKM_Moto_G84_A15
           path: boot_finished.img
+          
