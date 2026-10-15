@@ -16,11 +16,11 @@ jobs:
           sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev lld clang gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
           pip3 install gdown
 
-      - name: Baixar fonte do Kernel para compilar o módulo ksu.ko
+      - name: Baixar fonte do Kernel oficial da Motorola
         run: |
           git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git --depth=1 android-kernel
 
-      - name: Baixar e preparar KernelSU Next (LKM Mode)
+      - name: Integrar KernelSU Next
         run: |
           cd android-kernel
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
@@ -30,15 +30,27 @@ jobs:
           cd android-kernel
           touch .scmversion
           
+          # Configura defconfig
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/bangkk_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig
-          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- modules_prepare
-          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LOCALVERSION=-moto-17290-g91c2dab5855a M=drivers/kernelsu modules || true
           
-          # Procura o ksu.ko em qualquer pasta gerada e garante a cópia para a raiz do android-kernel
-          KSU_PATH=$(find . -name "ksu.ko" | head -n 1)
+          # Ativa suporte a módulos e habilita o KSU como Módulo (m)
+          scripts/config --file out/.config --enable CONFIG_MODULES
+          scripts/config --file out/.config --enable CONFIG_MODULE_UNLOAD
+          scripts/config --file out/.config --set-str CONFIG_LOCALVERSION "-moto-17290-g91c2dab5855a"
+          scripts/config --file out/.config --module CONFIG_KSU
+          
+          # Atualiza a configuração
+          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+          
+          # Prepara símbolos e compila os módulos
+          make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- modules_prepare
+          make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- M=drivers/kernelsu modules || make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- modules
+          
+          # Localiza o ksu.ko gerado
+          KSU_PATH=$(find out/ -name "ksu.ko" | head -n 1)
           if [ -n "$KSU_PATH" ]; then
               cp "$KSU_PATH" ./ksu.ko
-              echo "Módulo ksu.ko encontrado e copiado com sucesso de $KSU_PATH"
+              echo "Módulo ksu.ko encontrado em $KSU_PATH"
           else
               echo "ERRO: ksu.ko não foi compilado!"
               exit 1
@@ -49,7 +61,7 @@ jobs:
           mkdir -p work
           cd work
 
-          # 1. Baixar o boot.img Stock da ROM Android 15
+          # 1. Baixar boot.img Stock da ROM Android 15
           gdown "https://drive.google.com/uc?id=1rJ1xb5ZgOAYiMTMa86LzMSpRUk44-D5_" -O boot_stock.img
 
           # 2. Baixar magiskboot
@@ -58,28 +70,28 @@ jobs:
           cp lib/x86_64/libmagiskboot.so ./magiskboot
           chmod +x magiskboot
 
-          # 3. Descompactar o boot.img e a ramdisk
+          # 3. Descompactar boot.img e ramdisk
           ./magiskboot unpack boot_stock.img
           ./magiskboot cpio ramdisk.cpio extract
 
-          # 4. Copiar o módulo ksu.ko para a estrutura da ramdisk
+          # 4. Copiar o modulo ksu.ko para a ramdisk
           mkdir -p lib/modules
           cp ../android-kernel/ksu.ko ./lib/modules/ksu.ko
 
-          # 5. Injetar a ordem de carregamento insmod no arquivo init.rc
+          # 5. Injetar a ordem de carregamento insmod no init.rc
           if [ -f init.rc ]; then
               echo "" >> init.rc
               echo "on early-init" >> init.rc
               echo "    insmod /lib/modules/ksu.ko" >> init.rc
           fi
 
-          # 6. Reconstruir a ramdisk e reempacotar a imagem final
+          # 6. Reconstruir ramdisk e reempacotar a imagem final
           ./magiskboot cpio ramdisk.cpio "add 0755 lib/modules/ksu.ko ./lib/modules/ksu.ko"
           ./magiskboot cpio ramdisk.cpio "patch"
           ./magiskboot repack boot_stock.img boot_finished.img
           cp boot_finished.img ../boot_finished.img
 
-      - name: Anexar Artefato Final (Boot Image com LKM Ativo)
+      - name: Anexar Artefato Final
         uses: actions/upload-artifact@v4
         with:
           name: KernelSU_Next_LKM_Active_Moto_G84
