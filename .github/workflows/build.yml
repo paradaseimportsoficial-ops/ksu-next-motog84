@@ -34,7 +34,15 @@ jobs:
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- modules_prepare
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LOCALVERSION=-moto-17290-g91c2dab5855a M=drivers/kernelsu modules || true
           
-          find out/ -name "ksu.ko" -exec cp {} ./ksu.ko \; || find . -name "ksu.ko" -exec cp {} ./ksu.ko \;
+          # Procura o ksu.ko em qualquer pasta gerada e garante a cópia para a raiz do android-kernel
+          KSU_PATH=$(find . -name "ksu.ko" | head -n 1)
+          if [ -n "$KSU_PATH" ]; then
+              cp "$KSU_PATH" ./ksu.ko
+              echo "Módulo ksu.ko encontrado e copiado com sucesso de $KSU_PATH"
+          else
+              echo "ERRO: ksu.ko não foi compilado!"
+              exit 1
+          fi
 
       - name: Injetar Chamada no Init e Reempacotar boot.img
         run: |
@@ -50,15 +58,15 @@ jobs:
           cp lib/x86_64/libmagiskboot.so ./magiskboot
           chmod +x magiskboot
 
-          # 3. Descompactar o boot.img e ramdisk
+          # 3. Descompactar o boot.img e a ramdisk
           ./magiskboot unpack boot_stock.img
           ./magiskboot cpio ramdisk.cpio extract
 
-          # 4. Copiar o modulo ksu.ko gerado para a estrutura do ramdisk
+          # 4. Copiar o módulo ksu.ko para a estrutura da ramdisk
           mkdir -p lib/modules
           cp ../android-kernel/ksu.ko ./lib/modules/ksu.ko
 
-          # 5. Injetar a ordem de carregamento insmod no arquivo init.rc do Android
+          # 5. Injetar a ordem de carregamento insmod no arquivo init.rc
           if [ -f init.rc ]; then
               echo "" >> init.rc
               echo "on early-init" >> init.rc
