@@ -22,7 +22,7 @@ jobs:
 
       - name: Baixar KernelSU-Next Standalone
         run: |
-          git clone https://github.com/KernelSU-Next/KernelSU-Next.git -b next ksu-src
+          git clone https://github.com/KernelSU-Next/KernelSU-Next.git --recursive ksu-src
 
       - name: Preparar Headers do Kernel
         run: |
@@ -39,14 +39,14 @@ jobs:
           
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           
-          # Prepara os cabeçalhos sem exigir o vmlinux
+          # Prepara os cabeçalhos do kernel
           make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-w" WERROR=0 modules_prepare
 
       - name: Compilar Módulo ksu.ko Autônomo (LKM)
         run: |
           cd ksu-src/kernel
           
-          # Compila o módulo externo direcionando para a árvore de saída do kernel (KDIR)
+          # Compila o módulo externo apontando para a árvore de saída do kernel (KDIR)
           make -j$(nproc --all) ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- KDIR=../../android-kernel/out KCFLAGS="-w" WERROR=0 || make -j$(nproc --all) ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- KDIR=../../android-kernel KCFLAGS="-w" WERROR=0
           
           cd ../..
