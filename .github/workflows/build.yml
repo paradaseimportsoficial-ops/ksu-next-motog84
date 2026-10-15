@@ -1,4 +1,4 @@
-name: Build KernelSU Next LKM para Moto G84 5G (Android 15)
+name: Build KernelSU Next LKM Auto-Load para Moto G84 5G (Android 15)
 
 on:
   workflow_dispatch:
@@ -30,19 +30,13 @@ jobs:
           cd android-kernel
           touch .scmversion
           
-          # Configura defconfig básico
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/bangkk_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig
-          
-          # Prepara os headers e símbolos do Kernel 5.4
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- modules_prepare
-          
-          # Compila o módulo KSU
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LOCALVERSION=-moto-17290-g91c2dab5855a M=drivers/kernelsu modules || true
           
-          # Procura e garante a localização do ksu.ko
           find out/ -name "ksu.ko" -exec cp {} ./ksu.ko \; || find . -name "ksu.ko" -exec cp {} ./ksu.ko \;
 
-      - name: Injetar LKM e Reempacotar boot.img Stock
+      - name: Injetar Chamada no Init e Reempacotar boot.img
         run: |
           mkdir -p work
           cd work
@@ -56,21 +50,30 @@ jobs:
           cp lib/x86_64/libmagiskboot.so ./magiskboot
           chmod +x magiskboot
 
-          # 3. Descompactar o boot.img original mantendo o Kernel Stock intocado
+          # 3. Descompactar o boot.img e ramdisk
           ./magiskboot unpack boot_stock.img
+          ./magiskboot cpio ramdisk.cpio extract
 
-          # 4. Copiar o modulo ksu.ko gerado
-          if [ -f ../android-kernel/ksu.ko ]; then
-              cp ../android-kernel/ksu.ko ./ramdisk/lib/modules/ksu.ko || cp ../android-kernel/ksu.ko ./ksu.ko
+          # 4. Copiar o modulo ksu.ko gerado para a estrutura do ramdisk
+          mkdir -p lib/modules
+          cp ../android-kernel/ksu.ko ./lib/modules/ksu.ko
+
+          # 5. Injetar a ordem de carregamento insmod no arquivo init.rc do Android
+          if [ -f init.rc ]; then
+              echo "" >> init.rc
+              echo "on early-init" >> init.rc
+              echo "    insmod /lib/modules/ksu.ko" >> init.rc
           fi
 
-          # 5. Reempacotar a imagem original do boot
+          # 6. Reconstruir a ramdisk e reempacotar a imagem final
+          ./magiskboot cpio ramdisk.cpio "add 0755 lib/modules/ksu.ko ./lib/modules/ksu.ko"
+          ./magiskboot cpio ramdisk.cpio "patch"
           ./magiskboot repack boot_stock.img boot_finished.img
           cp boot_finished.img ../boot_finished.img
 
-      - name: Anexar Artefato Final (LKM Boot Image)
+      - name: Anexar Artefato Final (Boot Image com LKM Ativo)
         uses: actions/upload-artifact@v4
         with:
-          name: KernelSU_Next_LKM_Moto_G84_A15
+          name: KernelSU_Next_LKM_Active_Moto_G84
           path: boot_finished.img
           
