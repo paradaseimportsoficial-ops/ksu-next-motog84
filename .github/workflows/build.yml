@@ -31,13 +31,18 @@ jobs:
           gdown "${{ github.event.inputs.vendor_boot_url }}" -O vendor_boot.img
           ls -lh *.img
 
-      - name: Preparar AnyKernel3 e Magiskboot
+      - name: Preparar AnyKernel3 e Magiskboot correto (Linux x86_64)
         run: |
           git clone https://github.com/Kernel-SU/AnyKernel3 -b master anykernel
+          
+          # Baixa o Magisk oficial completo para extrair o magiskboot de Linux correto
           wget https://github.com/topjohnwu/Magisk/releases/download/v27.0/Magisk-v27.0.apk -O magisk.zip
-          unzip -q magisk.zip 'lib/arm64-v8a/libmagiskboot.so'
-          mv lib/arm64-v8a/libmagiskboot.so ./magiskboot
+          unzip -q magisk.zip
+          
+          # Copia o magiskboot nativo para Linux x86_64 que vem dentro do APK
+          mv lib/x86_64/libmagiskboot.so ./magiskboot
           chmod +x ./magiskboot
+          ./magiskboot -h || true
 
       - name: Processar e Integrar KernelSU Next
         run: |
@@ -60,6 +65,6 @@ jobs:
       - name: Enviar artefato do ZIP compilado
         uses: actions/upload-artifact@v4
         with:
-          name: MotoG84_KernelSU_Next_Flashable_Zip
+          name: MotoG84_KernelSUNext_Flashable_Zip
           path: MotoG84_KernelSUNext_Flashable.zip
           
