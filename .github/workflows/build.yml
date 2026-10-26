@@ -29,7 +29,6 @@ jobs:
 
       - name: Baixar Magiskboot
         run: |
-          # Baixa a versao v27.0 estável do Magisk
           wget https://github.com/topjohnwu/Magisk/releases/download/v27.0/Magisk-v27.0.apk
           unzip Magisk-v27.0.apk lib/x86_64/libmagiskboot.so
           mv lib/x86_64/libmagiskboot.so ./magiskboot
@@ -41,9 +40,14 @@ jobs:
           export SUBARCH=arm64
           export PATH=$PWD/prebuilts/clang/host/linux-x86/clang-r416183b/bin:$PATH
           
-          make O=out vendor/msm6375_defconfig
-          echo "CONFIG_KSU=y" >> out/.config
+          # Procura arquivos de defconfig disponíveis para o aparelho e usa o compativel
+          echo "Procurando arquivos de configuracao..."
+          find arch/arm64/configs -name "*defconfig"
           
+          # Configura usando o defconfig padrão encontrado para a plataforma msm
+          make O=out msm-open_defconfig || make O=out defconfig
+          
+          echo "CONFIG_KSU=y" >> out/.config
           make O=out CC=clang -j$(nproc)
 
       - name: Injetar Kernel Compilado no boot.img
