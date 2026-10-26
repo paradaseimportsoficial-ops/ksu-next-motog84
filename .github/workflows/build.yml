@@ -11,11 +11,6 @@ jobs:
       - name: Checkout do código
         uses: actions/checkout@v4
 
-      - name: Configurar ambiente e dependências
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick libelf-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc yasm zip zlib1g-dev
-
       - name: Baixar KernelSU Next
         run: |
           curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
@@ -43,10 +38,7 @@ jobs:
           export SUBARCH=arm64
           export PATH=$PWD/prebuilts/clang/host/linux-x86/clang-r416183b/bin:$PATH
           
-          # Configura a defconfig do Moto G84
           make O=out vendor/msm6375_defconfig
-          
-          # Compila o kernel do zero a partir do código-fonte
           make O=out CC=clang -j$(nproc)
 
       - name: Injetar Kernel Compilado no boot.img
@@ -55,14 +47,10 @@ jobs:
           cp ../stock_images/boot.img .
           ../magiskboot unpack boot.img
           
-          # Substitui o kernel original pelo novo binário compilado do zero
           cp ../out/arch/arm64/boot/Image ./kernel
-          
-          # Reempacota o boot.img com o KernelSU Next embutido
           ../magiskboot repack boot.img
           cd ..
           
-          # Prepara o pacote final em ZIP flashável
           mkdir -p flashable_zip
           cp work_boot/new-boot.img flashable_zip/boot.img
           cp stock_images/vendor_boot.img flashable_zip/vendor_boot.img
