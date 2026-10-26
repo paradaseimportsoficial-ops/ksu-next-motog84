@@ -1,70 +1,79 @@
-name: Compilar Moto G84 5G KernelSU Next Zip
+name: Compilar Kernel Moto G84 do Zero com KernelSU Next
 
 on:
   workflow_dispatch:
-    inputs:
-      boot_url:
-        description: 'Link do boot.img (Google Drive)'
-        required: true
-        default: 'https://drive.google.com/file/d/15WZxW59o_014c0T5u1_srezZ-5mHQOY5/view?usp=drivesdk'
-      vendor_boot_url:
-        description: 'Link do vendor_boot.img (Google Drive)'
-        required: true
-        default: 'https://drive.google.com/file/d/1aKIDbTiGpqye6hF1AgObPmwRV5ufmoAQ/view?usp=drivesdk'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Instalar ferramentas básicas
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar ambiente e dependências
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl wget zip unzip python3-pip
-          pip3 install --upgrade pip
-          pip3 install gdown
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick lib32ncurses5-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc yasm zip zlib1g-dev
 
-      - name: Baixar boot.img e vendor_boot do Google Drive
+      - name: Baixar KernelSU Next
         run: |
-          echo "Baixando boot.img..."
-          gdown "${{ github.event.inputs.boot_url }}" -O boot.img
-          echo "Baixando vendor_boot.img..."
-          gdown "${{ github.event.inputs.vendor_boot_url }}" -O vendor_boot.img
-          ls -lh *.img
+          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
 
-      - name: Preparar AnyKernel3 e Magiskboot correto (Linux x86_64)
+      - name: Baixar Toolchain (Clang/GCC)
         run: |
-          git clone https://github.com/Kernel-SU/AnyKernel3 -b master anykernel
-          
-          # Baixa o Magisk oficial completo para extrair o magiskboot de Linux correto
-          wget https://github.com/topjohnwu/Magisk/releases/download/v27.0/Magisk-v27.0.apk -O magisk.zip
-          unzip -q magisk.zip
-          
-          # Copia o magiskboot nativo para Linux x86_64 que vem dentro do APK
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_host_linux-x86_clang-r416183b prebuilts/clang/host/linux-x86/clang-r416183b
+
+      - name: Baixar boot.img e vendor_boot.img do Google Drive
+        run: |
+          mkdir -p stock_images
+          # Links diretos corretos para os seus arquivos stock:
+          curl -L 'https://drive.google.com/uc?export=download&id=15WZxW59o_014c0T5u1_srezZ-5mHQOY5' -o stock_images/boot.img
+          curl -L 'https://drive.google.com/uc?export=download&id=1aKIDbTiGpqye6hF1AgObPmwRV5ufmoAQ' -o stock_images/vendor_boot.img
+
+      - name: Baixar Magiskboot
+        run: |
+          wget https://github.com/topjohnwu/Magisk/releases/download/v26.3/Magisk-v26.3.apk
+          unzip Magisk-v26.3.apk lib/x86_64/libmagiskboot.so
           mv lib/x86_64/libmagiskboot.so ./magiskboot
           chmod +x ./magiskboot
-          ./magiskboot -h || true
 
-      - name: Processar e Integrar KernelSU Next
+      - name: Configurar e Compilar o Kernel do Zero
         run: |
-          ./magiskboot unpack boot.img
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export PATH=$PWD/prebuilts/clang/host/linux-x86/clang-r416183b/bin:$PATH
           
-          # Injeção automática do KernelSU Next
-          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next || true
+          # Configura a defconfig do Moto G84
+          make O=out vendor/msm6375_defconfig
           
-          # Organiza os arquivos para o AnyKernel3
-          cp boot.img anykernel/
-          cp vendor_boot.img anykernel/
+          # Compila o kernel do zero a partir do código-fonte
+          make O=out CC=clang -j$(nproc)
 
-      - name: Compactar pacote final .ZIP
+      - name: Injetar Kernel Compilado no boot.img
         run: |
-          cd anykernel
-          zip -r ../MotoG84_KernelSUNext_Flashable.zip *
+          mkdir -p work_boot && cd work_boot
+          cp ../stock_images/boot.img .
+          ../magiskboot unpack boot.img
+          
+          # Substitui o kernel original pelo novo binário compilado do zero
+          cp ../out/arch/arm64/boot/Image ./kernel
+          
+          # Reempacota o boot.img com o KernelSU Next embutido
+          ../magiskboot repack boot.img
           cd ..
-          ls -lh MotoG84_KernelSUNext_Flashable.zip
+          
+          # Prepara o pacote final em ZIP flashável
+          mkdir -p flashable_zip
+          cp work_boot/new-boot.img flashable_zip/boot.img
+          cp stock_images/vendor_boot.img flashable_zip/vendor_boot.img
+          
+          cd flashable_zip
+          zip -r9 ../MotoG84_KernelSUNext_Flashable.zip *
 
-      - name: Enviar artefato do ZIP compilado
+      - name: Salvar artefato do ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: MotoG84_KernelSUNext_Flashable_Zip
+          name: MotoG84_KernelSUNext_Flashable
           path: MotoG84_KernelSUNext_Flashable.zip
           
