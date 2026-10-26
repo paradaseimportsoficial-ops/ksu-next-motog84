@@ -1,4 +1,4 @@
-name: Build Moto G84 5G KernelSU Next Zip
+name: Compilar Moto G84 5G KernelSU Next Zip
 
 on:
   workflow_dispatch:
@@ -16,26 +16,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Liberar Espaço em Disco (Limpeza Avançada)
-        run: |
-          echo "Espaço livre inicial:"
-          df -h
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          sudo apt-get purge -y azure-cli google-cloud-sdk hhvm google-chrome-stable firefox powershell mono-devel mysql-client libmysqlclient-dev libmagickcore-dev libmagickwand-dev imagemagick
-          sudo apt-get autoremove -y
-          sudo apt-get clean
-          echo "Espaço livre após a limpeza:"
-          df -h
-
-      - name: Instalar dependências e ferramentas
+      - name: Instalar ferramentas básicas
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32ncurses5-dev lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc yasm zlib1g-dev python3-pip wget zip unzip
-          pip install --upgrade pip
-          pip install gdown
+          sudo apt-get install -y curl wget zip unzip python3-pip
+          pip3 install --upgrade pip
+          pip3 install gdown
 
       - name: Baixar boot.img e vendor_boot do Google Drive
         run: |
@@ -45,7 +31,7 @@ jobs:
           gdown "${{ github.event.inputs.vendor_boot_url }}" -O vendor_boot.img
           ls -lh *.img
 
-      - name: Preparar ambiente AnyKernel3 e Magiskboot
+      - name: Preparar AnyKernel3 e Magiskboot
         run: |
           git clone https://github.com/Kernel-SU/AnyKernel3 -b master anykernel
           wget https://github.com/topjohnwu/Magisk/releases/download/v27.0/Magisk-v27.0.apk -O magisk.zip
@@ -57,15 +43,12 @@ jobs:
         run: |
           ./magiskboot unpack boot.img
           
-          # Injeção automática do KernelSU Next na estrutura extraída
+          # Injeção automática do KernelSU Next
           curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next || true
           
-          # Copia os arquivos atualizados para o AnyKernel3
+          # Organiza os arquivos para o AnyKernel3
           cp boot.img anykernel/
           cp vendor_boot.img anykernel/
-          
-          cd anykernel
-          chmod +x ak3-core.sh tools/* 2>/dev/null || true
 
       - name: Compactar pacote final .ZIP
         run: |
