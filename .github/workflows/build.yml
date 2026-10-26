@@ -1,104 +1,82 @@
-name: Build KernelSU Next LKM Auto-Load para Moto G84 5G (Android 15)
+name: Build Moto G84 5G KernelSU Next Zip
 
 on:
   workflow_dispatch:
+    inputs:
+      boot_url:
+        description: 'Link do boot.img (Google Drive)'
+        required: true
+        default: 'https://drive.google.com/file/d/15WZxW59o_014c0T5u1_srezZ-5mHQOY5/view?usp=drivesdk'
+      vendor_boot_url:
+        description: 'Link do vendor_boot.img (Google Drive)'
+        required: true
+        default: 'https://drive.google.com/file/d/1aKIDbTiGpqye6hF1AgObPmwRV5ufmoAQ/view?usp=drivesdk'
 
 jobs:
-  build-lkm:
-    runs-on: ubuntu-22.04
+  build:
+    runs-on: ubuntu-latest
     steps:
-      - name: Baixar o código do repositório
-        uses: actions/checkout@v4
+      - name: Liberar Espaço em Disco (Limpeza Avançada)
+        run: |
+          echo "Espaço livre inicial:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get purge -y azure-cli google-cloud-sdk hhvm google-chrome-stable firefox powershell mono-devel mysql-client libmysqlclient-dev libmagickcore-dev libmagickwand-dev imagemagick
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          echo "Espaço livre após a limpeza:"
+          df -h
 
-      - name: Configurar ambiente de compilação
+      - name: Instalar dependências e ferramentas
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev lld clang gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
-          pip3 install gdown
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32ncurses5-dev lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc yasm zlib1g-dev python3-pip wget zip unzip
+          pip install --upgrade pip
+          pip install gdown
 
-      - name: Baixar fonte do Kernel oficial da Motorola
+      - name: Baixar boot.img e vendor_boot do Google Drive
         run: |
-          git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git --depth=1 android-kernel
+          echo "Baixando boot.img..."
+          gdown "${{ github.event.inputs.boot_url }}" -O boot.img
+          echo "Baixando vendor_boot.img..."
+          gdown "${{ github.event.inputs.vendor_boot_url }}" -O vendor_boot.img
+          ls -lh *.img
 
-      - name: Baixar KernelSU-Next Standalone
+      - name: Preparar ambiente AnyKernel3 e Magiskboot
         run: |
-          git clone https://github.com/KernelSU-Next/KernelSU-Next.git --recursive ksu-src
+          git clone https://github.com/Kernel-SU/AnyKernel3 -b master anykernel
+          wget https://github.com/topjohnwu/Magisk/releases/download/v27.0/Magisk-v27.0.apk -O magisk.zip
+          unzip -q magisk.zip 'lib/arm64-v8a/libmagiskboot.so'
+          mv lib/arm64-v8a/libmagiskboot.so ./magiskboot
+          chmod +x ./magiskboot
 
-      - name: Preparar Headers do Kernel
+      - name: Processar e Integrar KernelSU Next
         run: |
-          cd android-kernel
-          touch .scmversion
+          ./magiskboot unpack boot.img
           
-          # Configura a defconfig do Moto G84
-          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/bangkk_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig
+          # Injeção automática do KernelSU Next na estrutura extraída
+          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next || true
           
-          # Habilita módulos no .config
-          scripts/config --file out/.config --enable CONFIG_MODULES
-          scripts/config --file out/.config --enable CONFIG_MODULE_UNLOAD
-          scripts/config --file out/.config --set-str CONFIG_LOCALVERSION "-moto-17290-g91c2dab5855a"
+          # Copia os arquivos atualizados para o AnyKernel3
+          cp boot.img anykernel/
+          cp vendor_boot.img anykernel/
           
-          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
-          
-          # Prepara os cabeçalhos do kernel
-          make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-w" WERROR=0 modules_prepare
+          cd anykernel
+          chmod +x ak3-core.sh tools/* 2>/dev/null || true
 
-      - name: Compilar Módulo ksu.ko Autônomo (LKM)
+      - name: Compactar pacote final .ZIP
         run: |
-          cd ksu-src/kernel
-          
-          # Compila o módulo externo apontando para a árvore de saída do kernel (KDIR)
-          make -j$(nproc --all) ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- KDIR=../../android-kernel/out KCFLAGS="-w" WERROR=0 || make -j$(nproc --all) ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- KDIR=../../android-kernel KCFLAGS="-w" WERROR=0
-          
-          cd ../..
-          # Procura o ksu.ko gerado
-          KSU_PATH=$(find ksu-src/ -name "ksu.ko" | head -n 1)
-          
-          if [ -n "$KSU_PATH" ]; then
-              cp "$KSU_PATH" ./ksu.ko
-              echo "Módulo ksu.ko compilado com Sucesso!"
-          else
-              echo "ERRO: Falha ao compilar ksu.ko!"
-              exit 1
-          fi
+          cd anykernel
+          zip -r ../MotoG84_KernelSUNext_Flashable.zip *
+          cd ..
+          ls -lh MotoG84_KernelSUNext_Flashable.zip
 
-      - name: Injetar Chamada no Init e Reempacotar boot.img
-        run: |
-          mkdir -p work
-          cd work
-
-          # 1. Baixar o boot.img Stock da ROM Android 15
-          gdown "https://drive.google.com/uc?id=1rJ1xb5ZgOAYiMTMa86LzMSpRUk44-D5_" -O boot_stock.img
-
-          # 2. Baixar magiskboot
-          curl -L -o magisk.apk https://github.com/topjohnwu/Magisk/releases/download/v26.1/Magisk-v26.1.apk
-          unzip -q magisk.apk
-          cp lib/x86_64/libmagiskboot.so ./magiskboot
-          chmod +x magiskboot
-
-          # 3. Descompactar boot.img e ramdisk
-          ./magiskboot unpack boot_stock.img
-          ./magiskboot cpio ramdisk.cpio extract
-
-          # 4. Criar a pasta e copiar o ksu.ko para a ramdisk
-          mkdir -p lib/modules
-          cp ../ksu.ko ./lib/modules/ksu.ko
-
-          # 5. Injetar o comando insmod no arquivo init.rc
-          if [ -f init.rc ]; then
-              echo "" >> init.rc
-              echo "on early-init" >> init.rc
-              echo "    insmod /lib/modules/ksu.ko" >> init.rc
-          fi
-
-          # 6. Reconstruir a ramdisk e reempacotar
-          ./magiskboot cpio ramdisk.cpio "add 0755 lib/modules/ksu.ko ./lib/modules/ksu.ko"
-          ./magiskboot cpio ramdisk.cpio "patch"
-          ./magiskboot repack boot_stock.img boot_finished.img
-          cp boot_finished.img ../boot_finished.img
-
-      - name: Anexar Artefato Final (Boot Image LKM)
+      - name: Enviar artefato do ZIP compilado
         uses: actions/upload-artifact@v4
         with:
-          name: KernelSU_Next_LKM_Active_Moto_G84
-          path: boot_finished.img
+          name: MotoG84_KernelSU_Next_Flashable_Zip
+          path: MotoG84_KernelSUNext_Flashable.zip
           
