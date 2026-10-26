@@ -14,7 +14,7 @@ jobs:
       - name: Configurar ambiente e dependências
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick lib32ncurses5-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc yasm zip zlib1g-dev
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick libelf-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc yasm zip zlib1g-dev
 
       - name: Baixar KernelSU Next
         run: |
@@ -27,7 +27,6 @@ jobs:
       - name: Baixar boot.img e vendor_boot.img do Google Drive
         run: |
           mkdir -p stock_images
-          # Links diretos corretos para os seus arquivos stock:
           curl -L 'https://drive.google.com/uc?export=download&id=15WZxW59o_014c0T5u1_srezZ-5mHQOY5' -o stock_images/boot.img
           curl -L 'https://drive.google.com/uc?export=download&id=1aKIDbTiGpqye6hF1AgObPmwRV5ufmoAQ' -o stock_images/vendor_boot.img
 
