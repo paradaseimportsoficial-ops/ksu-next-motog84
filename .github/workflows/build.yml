@@ -29,8 +29,9 @@ jobs:
 
       - name: Baixar Magiskboot
         run: |
-          wget https://github.com/topjohnwu/Magisk/releases/download/v26.3/Magisk-v26.3.apk
-          unzip Magisk-v26.3.apk lib/x86_64/libmagiskboot.so
+          # Baixa a versao v27.0 estável do Magisk
+          wget https://github.com/topjohnwu/Magisk/releases/download/v27.0/Magisk-v27.0.apk
+          unzip Magisk-v27.0.apk lib/x86_64/libmagiskboot.so
           mv lib/x86_64/libmagiskboot.so ./magiskboot
           chmod +x ./magiskboot
 
