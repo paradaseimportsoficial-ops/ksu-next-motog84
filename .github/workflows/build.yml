@@ -11,10 +11,14 @@ jobs:
       - name: Checkout do código
         uses: actions/checkout@v4
 
-      - name: Integrar KernelSU Next manualmente
+      - name: Integrar KernelSU Next
         run: |
-          # Clona o KernelSU Next direto na pasta drivers/kernelsu
-          git clone https://github.com/rifsxd/KernelSU-Next.git -b next drivers/kernelsu
+          # Clona o KernelSU-Next na pasta drivers/kernelsu sem especificar branch invalida
+          git clone --depth=1 https://github.com/rifsxd/KernelSU-Next drivers/kernelsu
+          
+          # Adiciona as referencias do KernelSU aos arquivos do kernel se ainda nao existirem
+          grep -q "drivers/kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+          grep -q "drivers/kernelsu" drivers/Makefile || echo 'obj-y += kernelsu/' >> drivers/Makefile
 
       - name: Baixar Toolchain (Clang/GCC)
         run: |
@@ -40,6 +44,10 @@ jobs:
           export PATH=$PWD/prebuilts/clang/host/linux-x86/clang-r416183b/bin:$PATH
           
           make O=out vendor/msm6375_defconfig
+          
+          # Ativa a flag do KernelSU na configuracao
+          echo "CONFIG_KSU=y" >> out/.config
+          
           make O=out CC=clang -j$(nproc)
 
       - name: Injetar Kernel Compilado no boot.img
