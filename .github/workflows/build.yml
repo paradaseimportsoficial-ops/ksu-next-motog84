@@ -11,9 +11,10 @@ jobs:
       - name: Checkout do código
         uses: actions/checkout@v4
 
-      - name: Baixar KernelSU Next
+      - name: Integrar KernelSU Next manualmente
         run: |
-          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
+          # Clona o KernelSU Next direto na pasta drivers/kernelsu
+          git clone https://github.com/rifsxd/KernelSU-Next.git -b next drivers/kernelsu
 
       - name: Baixar Toolchain (Clang/GCC)
         run: |
