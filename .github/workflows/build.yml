@@ -13,16 +13,13 @@ jobs:
 
       - name: Integrar KernelSU Next
         run: |
-          # Clona o KernelSU-Next na pasta drivers/kernelsu sem especificar branch invalida
           git clone --depth=1 https://github.com/rifsxd/KernelSU-Next drivers/kernelsu
-          
-          # Adiciona as referencias do KernelSU aos arquivos do kernel se ainda nao existirem
           grep -q "drivers/kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
           grep -q "drivers/kernelsu" drivers/Makefile || echo 'obj-y += kernelsu/' >> drivers/Makefile
 
-      - name: Baixar Toolchain (Clang/GCC)
+      - name: Baixar Toolchain (Clang Google)
         run: |
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_host_linux-x86_clang-r416183b prebuilts/clang/host/linux-x86/clang-r416183b
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 prebuilts/clang/host/linux-x86
 
       - name: Baixar boot.img e vendor_boot.img do Google Drive
         run: |
@@ -44,8 +41,6 @@ jobs:
           export PATH=$PWD/prebuilts/clang/host/linux-x86/clang-r416183b/bin:$PATH
           
           make O=out vendor/msm6375_defconfig
-          
-          # Ativa a flag do KernelSU na configuracao
           echo "CONFIG_KSU=y" >> out/.config
           
           make O=out CC=clang -j$(nproc)
