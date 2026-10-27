@@ -1,75 +1,71 @@
-name: Compilar Kernel Moto G84 do Zero com KernelSU Next
+name: Compilar Kernel ZIP (AnyKernel3) para Moto G84
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
+  build-kernel-zip:
+    runs-on: ubuntu-22.04
     steps:
-      - name: Checkout do código
+      - name: Baixar o código do repositório
         uses: actions/checkout@v4
 
-      - name: Integrar KernelSU Next
+      - name: Instalar dependências
         run: |
-          git clone --depth=1 https://github.com/rifsxd/KernelSU-Next drivers/kernelsu
-          grep -q "drivers/kernelsu" drivers/Kconfig || echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
-          grep -q "drivers/kernelsu" drivers/Makefile || echo 'obj-y += kernelsu/' >> drivers/Makefile
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev lld clang gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
 
-      - name: Baixar Toolchain (Clang Google)
+      - name: Baixar Fonte do Kernel da Motorola (bangkk)
         run: |
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 prebuilts/clang/host/linux-x86
+          git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git --depth=1 android-kernel
 
-      - name: Baixar boot.img e vendor_boot.img do Google Drive
+      - name: Configurar Versão do Kernel
         run: |
-          mkdir -p stock_images
-          curl -L 'https://drive.google.com/uc?export=download&id=15WZxW59o_014c0T5u1_srezZ-5mHQOY5' -o stock_images/boot.img
-          curl -L 'https://drive.google.com/uc?export=download&id=1aKIDbTiGpqye6hF1AgObPmwRV5ufmoAQ' -o stock_images/vendor_boot.img
+          cd android-kernel
+          touch .scmversion
+          
+          # Carrega a config padrão do Moto G84
+          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/bangkk_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig
+          
+          # Define o nome personalizado que vai aparecer nas configurações
+          scripts/config --file out/.config --set-str CONFIG_LOCALVERSION "-tecnico-root-v1"
+          
+          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
-      - name: Baixar Magiskboot
+      - name: Compilar a Imagem do Kernel
         run: |
-          wget https://github.com/topjohnwu/Magisk/releases/download/v27.0/Magisk-v27.0.apk
-          unzip Magisk-v27.0.apk lib/x86_64/libmagiskboot.so
-          mv lib/x86_64/libmagiskboot.so ./magiskboot
-          chmod +x ./magiskboot
+          cd android-kernel
+          export HOSTCFLAGS="-Wno-error=strict-prototypes -Wno-error=implicit-int -Wno-error=implicit-function-declaration -Wno-error=return-type"
+          
+          make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-w" WERROR=0 Image.gz-dtb || make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-w" WERROR=0 Image.gz
 
-      - name: Configurar e Compilar o Kernel do Zero
+      - name: Empacotar em ZIP usando AnyKernel3
         run: |
-          export ARCH=arm64
-          export SUBARCH=arm64
-          export PATH=$PWD/prebuilts/clang/host/linux-x86/clang-r416183b/bin:$PATH
+          # Baixa o AnyKernel3 genérico
+          git clone https://github.com/osm0sis/AnyKernel3.git anykernel
+          rm -rf anykernel/.git anykernel/README.md
           
-          # Procura arquivos de defconfig disponíveis para o aparelho e usa o compativel
-          echo "Procurando arquivos de configuracao..."
-          find arch/arm64/configs -name "*defconfig"
+          # Copia a imagem do kernel compilada para dentro do AnyKernel3
+          KERNEL_IMG=$(find android-kernel/out/arch/arm64/boot/ -name "Image.gz-dtb" -o -name "Image.gz" | head -n 1)
+          if [ -n "$KERNEL_IMG" ]; then
+              cp "$KERNEL_IMG" anykernel/Image.gz-dtb
+              echo "Kernel copiado com sucesso para o AnyKernel3!"
+          else
+              echo "ERRO: Imagem do kernel não encontrada!"
+              exit 1
+          fi
           
-          # Configura usando o defconfig padrão encontrado para a plataforma msm
-          make O=out msm-open_defconfig || make O=out defconfig
+          # Configura o script do AnyKernel para o Moto G84 (bangkk)
+          cd anykernel
+          sed -i 's/block=.*/block=\/dev\/block\/bootdevice\/by-name\/boot/g' ak3-core.sh
+          sed -i 's/is_slot_device=.*/is_slot_device=0/g' ak3-core.sh
           
-          echo "CONFIG_KSU=y" >> out/.config
-          make O=out CC=clang -j$(nproc)
+          # Cria o arquivo ZIP final
+          zip -r9 ../MotoG84_Custom_Kernel_AnyKernel3.zip *
 
-      - name: Injetar Kernel Compilado no boot.img
-        run: |
-          mkdir -p work_boot && cd work_boot
-          cp ../stock_images/boot.img .
-          ../magiskboot unpack boot.img
-          
-          cp ../out/arch/arm64/boot/Image ./kernel
-          ../magiskboot repack boot.img
-          cd ..
-          
-          mkdir -p flashable_zip
-          cp work_boot/new-boot.img flashable_zip/boot.img
-          cp stock_images/vendor_boot.img flashable_zip/vendor_boot.img
-          
-          cd flashable_zip
-          zip -r9 ../MotoG84_KernelSUNext_Flashable.zip *
-
-      - name: Salvar artefato do ZIP
+      - name: Enviar Arquivo ZIP como Artefato
         uses: actions/upload-artifact@v4
         with:
-          name: MotoG84_KernelSUNext_Flashable
-          path: MotoG84_KernelSUNext_Flashable.zip
+          name: MotoG84_Kernel_ZIP
+          path: MotoG84_Custom_Kernel_AnyKernel3.zip
           
