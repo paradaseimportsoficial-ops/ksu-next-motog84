@@ -30,7 +30,7 @@ jobs:
           # Define o nome personalizado que vai aparecer nas configurações
           scripts/config --file out/.config --set-str CONFIG_LOCALVERSION "-tecnico-root-v1"
           
-          # Ativa explicitamente os drivers SCM e gerenciamento de energia Qualcomm exigidos pelo defconfig
+          # Ativa explicitamente os drivers SCM e gerenciamento de energia Qualcomm
           scripts/config --file out/.config --enable CONFIG_QCOM_SCM
           scripts/config --file out/.config --enable CONFIG_POWER_RESET_MSM
           scripts/config --file out/.config --enable CONFIG_QCOM_PON
@@ -60,10 +60,15 @@ jobs:
               exit 1
           fi
           
-          # Configura o script do AnyKernel para o Moto G84 (bangkk)
+          # Configura o script do AnyKernel de forma segura para o Moto G84
           cd anykernel
-          sed -i 's/block=.*/block=\/dev\/block\/bootdevice\/by-name\/boot/g' ak3-core.sh
-          sed -i 's/is_slot_device=.*/is_slot_device=0/g' ak3-core.sh
+          if [ -f "ak3-core.sh" ]; then
+              sed -i 's/block=.*/block=\/dev\/block\/bootdevice\/by-name\/boot/g' ak3-core.sh
+              sed -i 's/is_slot_device=.*/is_slot_device=0/g' ak3-core.sh
+          elif [ -f "common/ak3-core.sh" ]; then
+              sed -i 's/block=.*/block=\/dev\/block\/bootdevice\/by-name\/boot/g' common/ak3-core.sh
+              sed -i 's/is_slot_device=.*/is_slot_device=0/g' common/ak3-core.sh
+          fi
           
           # Cria o arquivo ZIP final
           zip -r9 ../MotoG84_Custom_Kernel_AnyKernel3.zip *
