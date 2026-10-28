@@ -19,7 +19,7 @@ jobs:
         run: |
           git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git --depth=1 android-kernel
 
-      - name: Configurar Versão do Kernel
+      - name: Configurar Versão e Dependências do Kernel
         run: |
           cd android-kernel
           touch .scmversion
@@ -29,6 +29,11 @@ jobs:
           
           # Define o nome personalizado que vai aparecer nas configurações
           scripts/config --file out/.config --set-str CONFIG_LOCALVERSION "-tecnico-root-v1"
+          
+          # Ativa explicitamente os drivers SCM e gerenciamento de energia Qualcomm exigidos pelo defconfig
+          scripts/config --file out/.config --enable CONFIG_QCOM_SCM
+          scripts/config --file out/.config --enable CONFIG_POWER_RESET_MSM
+          scripts/config --file out/.config --enable CONFIG_QCOM_PON
           
           make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
