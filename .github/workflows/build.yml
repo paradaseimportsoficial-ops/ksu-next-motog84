@@ -19,7 +19,7 @@ jobs:
       - name: Instalar dependências
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev lld clang gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi curl cpio
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev lld clang gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi curl cpio jq
 
       - name: Baixar Fonte do Kernel da Motorola (bangkk)
         run: |
@@ -50,14 +50,15 @@ jobs:
           CODE="$(awk '/_warning_/ {print $NF}' ./cookie)"
           curl -Lb ./cookie "https://drive.google.com/uc?export=download&confirm=${CODE}&id=${FILE_ID}" -o boot.img
           
-          # 2. Baixa as ferramentas do APatch (kptools e kpimg)
-          wget https://github.com/bmax121/APatch/releases/download/v10763/kptools-linux -O kptools
-          wget https://github.com/bmax121/APatch/releases/download/v10763/kpimg-android -O kpimg
+          # 2. Baixa a versão mais recente do kptools e kpimg via API do GitHub
+          KPTOOLS_URL=$(curl -s https://api.github.com/repos/bmax121/APatch/releases/latest | jq -r '.assets[] | select(.name | contains("kptools-linux")) | .browser_download_url' | head -n 1)
+          KPIMG_URL=$(curl -s https://api.github.com/repos/bmax121/APatch/releases/latest | jq -r '.assets[] | select(.name | contains("kpimg-android")) | .browser_download_url' | head -n 1)
+
+          curl -L -o kptools "$KPTOOLS_URL"
+          curl -L -o kpimg "$KPIMG_URL"
           chmod +x kptools
 
-          # 3. Desempacota o boot.img oficial
-          git clone https://github.com/topjohnwu/Magisk.git --depth=1 magisk_src
-          # Usa o magiskboot embutido ou baixa uma versão estável se necessário
+          # 3. Baixa o magiskboot para desempacotar a imagem
           curl -L -o magiskboot https://github.com/vvb2060/magiskboot_for_ndk/releases/download/v26.1/magiskboot
           chmod +x magiskboot
           
@@ -91,5 +92,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MotoG84_APatch_Boot_IMG
-          path: MotoG84_APatch_Boot_IMG/../MotoG84_APatch_TeccnicoRoot.img
+          path: MotoG84_APatch_TeccnicoRoot.img
           
