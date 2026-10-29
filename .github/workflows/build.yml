@@ -1,10 +1,16 @@
-name: Compilar Kernel e Injetar no Boot.img para Moto G84
+name: Compilar Kernel e Injetar APatch no Moto G84
 
 on:
   workflow_dispatch:
+    inputs:
+      superkey:
+        description: 'SuperKey do APatch (mínimo 8 caracteres)'
+        required: true
+        default: 'suasenha123'
+        type: string
 
 jobs:
-  build-and-pack-boot:
+  build-and-apatch:
     runs-on: ubuntu-22.04
     steps:
       - name: Baixar o código do repositório
@@ -36,47 +42,54 @@ jobs:
           export HOSTCFLAGS="-Wno-error=strict-prototypes -Wno-error=implicit-int -Wno-error=implicit-function-declaration -Wno-error=return-type"
           make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-w" WERROR=0 Image.gz-dtb || make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-w" WERROR=0 Image.gz
 
-      - name: Baixar e Modificar o boot.img oficial
+      - name: Baixar boot.img e Aplicar Patch do APatch
         run: |
-          # Baixa o boot.img do Google Drive usando o ID extraído do seu link
+          # 1. Baixa o boot.img do Google Drive
           FILE_ID="15WZxW59o_014c0T5u1_srezZ-5mHQOY5"
           curl -sc ./cookie "https://drive.google.com/uc?export=download&id=${FILE_ID}" > /dev/null
           CODE="$(awk '/_warning_/ {print $NF}' ./cookie)"
           curl -Lb ./cookie "https://drive.google.com/uc?export=download&confirm=${CODE}&id=${FILE_ID}" -o boot.img
           
-          # Baixa o magiskboot para manipular a imagem de boot (padrão Android moderno)
+          # 2. Baixa as ferramentas do APatch (kptools e kpimg)
+          wget https://github.com/bmax121/APatch/releases/download/v10763/kptools-linux -O kptools
+          wget https://github.com/bmax121/APatch/releases/download/v10763/kpimg-android -O kpimg
+          chmod +x kptools
+
+          # 3. Desempacota o boot.img oficial
           git clone https://github.com/topjohnwu/Magisk.git --depth=1 magisk_src
-          make -C magisk_src/native/auxfiles/bootimg unpack || true
-          # Alternativa segura: baixa a ferramenta magiskboot pré-compilada
-          curl -L -o magiskboot https://github.com/vvb2060/magiskboot_for_ndk/releases/download/v26.1/magiskboot || true
-          chmod +x magiskboot || true
+          # Usa o magiskboot embutido ou baixa uma versão estável se necessário
+          curl -L -o magiskboot https://github.com/vvb2060/magiskboot_for_ndk/releases/download/v26.1/magiskboot
+          chmod +x magiskboot
           
-          # Caso prefira unpacking padrão via script ou magiskboot
           mkdir boot_unpack && cd boot_unpack
-          ../magiskboot unpack ../boot.img || true
-          
-          # Copia o kernel recém-compilado para substituir o original (Image ou Image.gz-dtb)
-          KERNEL_IMG=$(find ../android-kernel/out/arch/arm64/boot/ -name "Image.gz-dtb" -o -name "Image.gz" | head -n 1)
-          if [ -n "$KERNEL_IMG" ]; then
-              cp "$KERNEL_IMG" kernel
+          ../magiskboot unpack ../boot.img
+          cd ..
+
+          # 4. Copia o kernel compilado para dentro da pasta de unpack
+          KERNEL_IMG=$(find android-kernel/out/arch/arm64/boot/ -name "Image.gz-dtb" -o -name "Image.gz" | head -n 1)
+          cp "$KERNEL_IMG" boot_unpack/kernel
+
+          # 5. Aplica o patch do APatch no kernel customizado
+          ./kptools -p --image boot_unpack/kernel --skey "${{ github.event.inputs.superkey }}" --kpimg kpimg --out boot_unpack/kernel-patched
+
+          # Substitui o kernel original pelo kernel com APatch aplicado
+          mv boot_unpack/kernel-patched boot_unpack/kernel
+
+          # 6. Reempacota o boot.img final
+          cd boot_unpack
+          ../magiskboot repack ../boot.img
+          cd ..
+
+          if [ -f "boot_unpack/new-boot.img" ]; then
+              cp boot_unpack/new-boot.img MotoG84_APatch_TeccnicoRoot.img
           else
-              echo "ERRO: Kernel não encontrado!"
+              echo "ERRO ao gerar o boot final!"
               exit 1
           fi
-          
-          # Reempacota o boot.img modificado
-          ../magiskboot repack ../boot.img || true
-          cd ..
-          
-          if [ -f "boot_unpack/new-boot.img" ]; then
-              cp boot_unpack/new-boot.img MotoG84_tecnico_root_boot.img
-          else
-              cp boot_unpack/boot.img MotoG84_tecnico_root_boot.img
-          fi
 
-      - name: Enviar Arquivo Boot como Artefato
+      - name: Enviar Arquivo Boot Final como Artefato
         uses: actions/upload-artifact@v4
         with:
-          name: MotoG84_Custom_Boot_IMG
-          path: MotoG84_tecnico_root_boot.img
+          name: MotoG84_APatch_Boot_IMG
+          path: MotoG84_APatch_Boot_IMG/../MotoG84_APatch_TeccnicoRoot.img
           
