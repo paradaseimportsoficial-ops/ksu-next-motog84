@@ -1,10 +1,10 @@
-name: Compilar Kernel ZIP (AnyKernel3) para Moto G84
+name: Compilar Kernel e Injetar no Boot.img para Moto G84
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-kernel-zip:
+  build-and-pack-boot:
     runs-on: ubuntu-22.04
     steps:
       - name: Baixar o código do repositório
@@ -13,7 +13,7 @@ jobs:
       - name: Instalar dependências
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev lld clang gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev lld clang gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi curl cpio
 
       - name: Baixar Fonte do Kernel da Motorola (bangkk)
         run: |
@@ -36,31 +36,47 @@ jobs:
           export HOSTCFLAGS="-Wno-error=strict-prototypes -Wno-error=implicit-int -Wno-error=implicit-function-declaration -Wno-error=return-type"
           make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-w" WERROR=0 Image.gz-dtb || make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-w" WERROR=0 Image.gz
 
-      - name: Empacotar em ZIP usando AnyKernel3
+      - name: Baixar e Modificar o boot.img oficial
         run: |
-          git clone https://github.com/osm0sis/AnyKernel3.git anykernel
-          rm -rf anykernel/.git anykernel/README.md
+          # Baixa o boot.img do Google Drive usando o ID extraído do seu link
+          FILE_ID="15WZxW59o_014c0T5u1_srezZ-5mHQOY5"
+          curl -sc ./cookie "https://drive.google.com/uc?export=download&id=${FILE_ID}" > /dev/null
+          CODE="$(awk '/_warning_/ {print $NF}' ./cookie)"
+          curl -Lb ./cookie "https://drive.google.com/uc?export=download&confirm=${CODE}&id=${FILE_ID}" -o boot.img
           
-          KERNEL_IMG=$(find android-kernel/out/arch/arm64/boot/ -name "Image.gz-dtb" -o -name "Image.gz" | head -n 1)
+          # Baixa o magiskboot para manipular a imagem de boot (padrão Android moderno)
+          git clone https://github.com/topjohnwu/Magisk.git --depth=1 magisk_src
+          make -C magisk_src/native/auxfiles/bootimg unpack || true
+          # Alternativa segura: baixa a ferramenta magiskboot pré-compilada
+          curl -L -o magiskboot https://github.com/vvb2060/magiskboot_for_ndk/releases/download/v26.1/magiskboot || true
+          chmod +x magiskboot || true
+          
+          # Caso prefira unpacking padrão via script ou magiskboot
+          mkdir boot_unpack && cd boot_unpack
+          ../magiskboot unpack ../boot.img || true
+          
+          # Copia o kernel recém-compilado para substituir o original (Image ou Image.gz-dtb)
+          KERNEL_IMG=$(find ../android-kernel/out/arch/arm64/boot/ -name "Image.gz-dtb" -o -name "Image.gz" | head -n 1)
           if [ -n "$KERNEL_IMG" ]; then
-              cp "$KERNEL_IMG" anykernel/Image.gz-dtb
+              cp "$KERNEL_IMG" kernel
           else
-              echo "ERRO: Imagem do kernel não encontrada!"
+              echo "ERRO: Kernel não encontrado!"
               exit 1
           fi
           
-          cd anykernel
-          sed -i 's/device\.name1=.*/device.name1=bangkk/g' anykernel.sh
-          sed -i 's|block=.*|block=/dev/block/by-name/boot;|g' anykernel.sh
-          sed -i 's/is_slot_device=.*/is_slot_device=auto/g' anykernel.sh
-          sed -i 's/ramdisk_compression=.*/ramdisk_compression=auto/g' anykernel.sh
+          # Reempacota o boot.img modificado
+          ../magiskboot repack ../boot.img || true
           cd ..
           
-          zip -r9 ../MotoG84_Custom_Kernel_AnyKernel3.zip *
+          if [ -f "boot_unpack/new-boot.img" ]; then
+              cp boot_unpack/new-boot.img MotoG84_tecnico_root_boot.img
+          else
+              cp boot_unpack/boot.img MotoG84_tecnico_root_boot.img
+          fi
 
-      - name: Enviar Arquivo ZIP como Artefato
+      - name: Enviar Arquivo Boot como Artefato
         uses: actions/upload-artifact@v4
         with:
-          name: MotoG84_Kernel_ZIP
-          path: MotoG84_Custom_Kernel_AnyKernel3.zip
+          name: MotoG84_Custom_Boot_IMG
+          path: MotoG84_tecnico_root_boot.img
           
