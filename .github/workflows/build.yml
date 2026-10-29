@@ -64,7 +64,7 @@ jobs:
           cd anykernel
           if [ -f "anykernel.sh" ]; then
               sed -i 's/device\.name1=.*/device.name1=bangkk/g' anykernel.sh
-              sed -i 's/device\.name2=.*/device.name2=msm6225/g' anykernel.sh
+              sed -i 's/device\.name2=.*/device.name2=bangkk/g' anykernel.sh
               sed -i 's/block=.*/block=\/dev\/block\/bootdevice\/by-name\/boot/g' anykernel.sh
               sed -i 's/is_slot_device=.*/is_slot_device=0/g' anykernel.sh
               sed -i 's/ramdisk_compression=.*/ramdisk_compression=auto/g' anykernel.sh
