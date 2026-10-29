@@ -60,13 +60,14 @@ jobs:
               exit 1
           fi
           
-          # Configura o AnyKernel para o Moto G84 e remove checagem restritiva de device
+          # Configura o AnyKernel para o Moto G84 com o bloco de boot correto da Qualcomm
           cd anykernel
           if [ -f "anykernel.sh" ]; then
               sed -i 's/device\.name1=.*/device.name1=bangkk/g' anykernel.sh
               sed -i 's/device\.name2=.*/device.name2=msm6225/g' anykernel.sh
               sed -i 's/block=.*/block=\/dev\/block\/bootdevice\/by-name\/boot/g' anykernel.sh
               sed -i 's/is_slot_device=.*/is_slot_device=0/g' anykernel.sh
+              sed -i 's/ramdisk_compression=.*/ramdisk_compression=auto/g' anykernel.sh
           fi
           
           # Cria o arquivo ZIP final
