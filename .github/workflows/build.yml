@@ -19,7 +19,7 @@ jobs:
       - name: Instalar dependências
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev lld clang gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi curl cpio jq
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev lld clang gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi curl cpio
 
       - name: Baixar Fonte do Kernel da Motorola (bangkk)
         run: |
@@ -50,12 +50,9 @@ jobs:
           CODE="$(awk '/_warning_/ {print $NF}' ./cookie)"
           curl -Lb ./cookie "https://drive.google.com/uc?export=download&confirm=${CODE}&id=${FILE_ID}" -o boot.img
           
-          # 2. Baixa a versão mais recente do kptools e kpimg via API do GitHub
-          KPTOOLS_URL=$(curl -s https://api.github.com/repos/bmax121/APatch/releases/latest | jq -r '.assets[] | select(.name | contains("kptools-linux")) | .browser_download_url' | head -n 1)
-          KPIMG_URL=$(curl -s https://api.github.com/repos/bmax121/APatch/releases/latest | jq -r '.assets[] | select(.name | contains("kpimg-android")) | .browser_download_url' | head -n 1)
-
-          curl -L -o kptools "$KPTOOLS_URL"
-          curl -L -o kpimg "$KPIMG_URL"
+          # 2. Baixa diretamente os binários oficiais do APatch via tags estáveis
+          curl -L -o kptools "https://github.com/bmax121/APatch/releases/download/v10763/kptools-linux"
+          curl -L -o kpimg "https://github.com/bmax121/APatch/releases/download/v10763/kpimg-android"
           chmod +x kptools
 
           # 3. Baixa o magiskboot para desempacotar a imagem
