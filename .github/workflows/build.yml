@@ -1,49 +1,3 @@
-name: Compilar Kernel ZIP (AnyKernel3) para Moto G84
-
-on:
-  workflow_dispatch:
-
-jobs:
-  build-kernel-zip:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Baixar o código do repositório
-        uses: actions/checkout@v4
-
-      - name: Instalar dependências
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev python3-pip lz4 pigz git ccache libncurses5-dev lld clang gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
-
-      - name: Baixar Fonte do Kernel da Motorola (bangkk)
-        run: |
-          git clone https://github.com/MotorolaMobilityLLC/kernel-msm.git --depth=1 android-kernel
-
-      - name: Configurar Versão e Dependências do Kernel
-        run: |
-          cd android-kernel
-          touch .scmversion
-          
-          # Carrega a config padrão do Moto G84
-          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- vendor/bangkk_defconfig || make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig
-          
-          # Define o nome personalizado que vai aparecer nas configurações
-          scripts/config --file out/.config --set-str CONFIG_LOCALVERSION "-tecnico-root-v1"
-          
-          # Ativa explicitamente os drivers SCM e gerenciamento de energia Qualcomm
-          scripts/config --file out/.config --enable CONFIG_QCOM_SCM
-          scripts/config --file out/.config --enable CONFIG_POWER_RESET_MSM
-          scripts/config --file out/.config --enable CONFIG_QCOM_PON
-          
-          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
-
-      - name: Compilar a Imagem do Kernel
-        run: |
-          cd android-kernel
-          export HOSTCFLAGS="-Wno-error=strict-prototypes -Wno-error=implicit-int -Wno-error=implicit-function-declaration -Wno-error=return-type"
-          
-          make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-w" WERROR=0 Image.gz-dtb || make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- KCFLAGS="-w" WERROR=0 Image.gz
-
       - name: Empacotar em ZIP usando AnyKernel3
         run: |
           # Baixa o AnyKernel3 genérico
@@ -60,22 +14,36 @@ jobs:
               exit 1
           fi
           
-          # Configura o AnyKernel para o Moto G84 com o bloco de boot correto
+          # Configura diretamente o anykernel.sh para evitar falhas do sed
           cd anykernel
-          if [ -f "anykernel.sh" ]; then
-              sed -i 's/device\.name1=.*/device.name1=bangkk/g' anykernel.sh
-              sed -i 's/device\.name2=.*/device.name2=bangkk/g' anykernel.sh
-              sed -i 's/block=.*/block=\/dev\/block\/by-name\/boot/g' anykernel.sh
-              sed -i 's/is_slot_device=.*/is_slot_device=auto/g' anykernel.sh
-              sed -i 's/ramdisk_compression=.*/ramdisk_compression=auto/g' anykernel.sh
-          fi
+          cat << 'EOF' > anykernel.sh
+          # AnyKernel3 Ramdisk Mod Script
+          properties() { '
+          kernel.string=Custom Kernel for Moto G84 by tecnico-root
+          do.devicecheck=1
+          do.modules=0
+          do.systemless=1
+          do.cleanup=1
+          do.cleanuponabort=0
+          device.name1=bangkk
+          device.name2=
+          device.name3=
+          device.name4=
+          device.name5=
+          '; }
+
+          # boot shell
+          block=/dev/block/by-name/boot;
+          is_slot_device=auto;
+          ramdisk_compression=auto;
+
+          . tools/ak3-core.sh;
+          boot_image="$(find_block boot)";
+          ui_print "Boot image: $boot_image";
+          write_boot;
+          EOF
           
+          cd ..
           # Cria o arquivo ZIP final
           zip -r9 ../MotoG84_Custom_Kernel_AnyKernel3.zip *
-
-      - name: Enviar Arquivo ZIP como Artefato
-        uses: actions/upload-artifact@v4
-        with:
-          name: MotoG84_Kernel_ZIP
-          path: MotoG84_Custom_Kernel_AnyKernel3.zip
           
