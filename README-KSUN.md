@@ -43,3 +43,12 @@ Verificados: round-trip do payload original, hashes dos insumos e de todos os ar
 O boot original analisado é de uma base diferente: `5.4.295-moto-17290-g91c2dab5855a`, compilação do aparelho `V1TCS35H.88-16-9`. SHA-256 do boot enviado: `f214a2339f0914e0d0871012dd5d82bdd546a7cdff5149f25a37f9c95074f0a0`. A imagem tem cabeçalho Android boot v3 e configuração embutida; ela não é usada automaticamente para empacotar o kernel antigo.
 
 O pacote de compilação **não é boot.img nem instalador TWRP**. Ainda faltam validar módulos externos/vendor, DTB/DTBO, firmware e Manager compatível, além de teste no dispositivo. Não contém instruções de downgrade nem modifica bootloader/GPT. Não faça downgrade ou flash deste artefato somente porque a compilação passou.
+
+
+## Vendor boot recebido — incompatibilidade encontrada
+
+O vendor_boot recebido posteriormente tem SHA256 `04fcd581c15a5d52bbb2335f39592fb1e21b9733945f88ff9aeb74eadec09559`, cabeçalho v3, página 4096, vendor ramdisk gzip de 731250 bytes e DTB de 323929 bytes. A cmdline identifica bangkk. Os 48 módulos ELF64 ARM64 contidos no ramdisk declaram vermagic `5.4.295-moto-17286-gd5c26e98f35d SMP preempt mod_unload modversions aarch64`, diferente do boot base recebido (5.4.284) e da build.
+
+A comparação das entradas ELF `__versions` desses módulos com o `Module.symvers` da build encontrou CRCs divergentes em todos os 48 módulos. Exemplo: `module_layout` exige `0x1e5b7ab7`, mas a build exporta `0x5661dded`. Portanto este conjunto de módulos não está compatível com a build experimental; não montar um instalador usando esse vendor_boot. Não se corrigiu vermagic nem se desabilitou a checagem de versões. Alguns drivers podem estar embutidos na build; isso não valida os demais módulos externos.
+
+Próximo insumo: vendor_boot extraído do mesmo pacote de firmware V1TCS35H.88-16-1 do boot de base, além dos módulos vendor correspondentes. A versão exata do firmware deste vendor_boot não foi determinada só pelo vermagic. A imagem de engenharia entregue continua sem validação para instalação.
