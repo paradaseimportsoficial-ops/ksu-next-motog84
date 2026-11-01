@@ -2,9 +2,6 @@ name: Moto G84 - KernelSU Next experimental
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/ksun-bangkk-experimental.yml'
 
 permissions:
   contents: read
@@ -137,6 +134,8 @@ jobs:
           cp out/Module.symvers ../dist/
           make O=out INSTALL_MOD_PATH="$GITHUB_WORKSPACE/dist/modules" modules_install \
             2>&1 | tee ../logs/modules-install.log
+          # modules_install creates links back to the entire source/build tree.
+          find ../dist/modules -type l \\( -name build -o -name source \\) -delete
           cp ../logs/kernel.config ../logs/sources.txt ../logs/kernelrelease.txt ../dist/
           git diff --binary > ../dist/kernel-integration.patch
           git -C KernelSU-Next diff --binary > ../dist/ksun-build-adjustments.patch
