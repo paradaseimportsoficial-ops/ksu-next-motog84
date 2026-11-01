@@ -59,7 +59,15 @@ jobs:
           printf 'Motorola tag: MMI-V1TCS35H.88-16-1\nKernel: %s\nKernelSU Next legacy: %s\nClang repository: %s\n' \
             "$KERNEL_SHA" "$KSU_SHA" "$CLANG_SHA" > logs/sources.txt
 
+      - name: Restore pinned Clang toolchain
+        id: clang-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: toolchain/
+          key: android-clang-r383902b1-${{ env.CLANG_SHA }}
+
       - name: Download original-generation Android Clang 11
+        if: steps.clang-cache.outputs.cache-hit != 'true'
         run: |
           curl --fail --location --retry 3 \
             "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/$CLANG_SHA/clang-r383902b1.tar.gz" \
@@ -67,6 +75,15 @@ jobs:
           sha256sum clang.tar.gz >> logs/sources.txt
           tar -xzf clang.tar.gz -C toolchain
           rm clang.tar.gz
+      - name: Save pinned Clang toolchain
+        if: steps.clang-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: toolchain/
+          key: android-clang-r383902b1-${{ env.CLANG_SHA }}
+
+      - name: Activate Clang
+        run: |
           "$PWD/toolchain/bin/clang" --version | tee logs/compiler.txt
           echo "$PWD/toolchain/bin" >> "$GITHUB_PATH"
 
@@ -104,6 +121,8 @@ jobs:
         run: |
           cd kernel
           make O=out headers_install 2>&1 | tee ../logs/headers.log
+          # A standalone driver build does not generate SELinux's flask.h itself.
+          make -j2 O=out security/selinux/ 2>&1 | tee ../logs/selinux-build.log
           make -j2 O=out drivers/kernelsu/ 2>&1 | tee ../logs/ksun-build.log
 
       - name: Compile kernel image and in-tree modules
