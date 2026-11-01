@@ -34,7 +34,11 @@ Resultado validado:
 
 A comparação preliminar entre a configuração da build e a extraída do boot atual apontou 14 diferenças de valores CONFIG e 13 opções `=m` em cada configuração. Isso não verifica ABI/CRCs nem garante compatibilidade com módulos externos. A extração de símbolos iniciada para essa comparação ainda não produziu um relatório de ABI validado.
 
-Próxima dependência: obter e validar o boot original da base `V1TCS35H.88-16-1` antes de preparar uma imagem para essa base. O boot fornecido de `88-16-9` não foi automaticamente combinado com o kernel antigo. Nenhum downgrade foi executado ou validado.
+Foi recebido outro boot, com identificação interna `V1TCS35H.88-16-1` / bangkk / d09472 e kernel `5.4.284-moto-gef07def7b0a7`. SHA256: `4b5b3930abb5ccfbc2a516bc9b7c613ff22e31ba6b6f0dfdabe2dfe07776252f`. A assinatura/procedência Motorola não foi autenticada.
+
+Foi montada uma imagem de engenharia unsigned de 44.187.648 bytes, preservando o ramdisk byte a byte, o cabeçalho v3 e seus campos, exceto kernel_size. O kernel foi substituído pelo Image compilado. Os metadados AVB originais não foram copiados porque descrevem o kernel anterior. SHA256 da imagem: `029c521572f57cf2be44b6d03f33ada380d5212c716652d6f13d3d37fdb268ba`. O pacote `MotoG84-KSUN-boot-88-16-1-EXPERIMENTAL.zip` contém a imagem, script reproduzível, relatório e checksums; não é instalador TWRP. SHA256 do ZIP: `e9c3e9a26676f7c185eed3313e72bca1fe6103f92a8d8cf19894b99c7cec74e2`.
+
+Verificados: round-trip do payload original, hashes dos insumos e de todos os arquivos do manifesto de compilação, estrutura e alinhamento da saída, preservação exata do ramdisk, rejeição de entradas truncadas/cabeçalho incompatível. Há oito diferenças CONFIG entre este kernel original e a build, incluindo KSU, VDSO, RELR e localversion. O ramdisk não contém arquivos .ko. Faltam vendor_boot e módulos externos da mesma base para conferir compatibilidade. Nenhum boot, root, hardware ou downgrade foi testado. Não tratar a imagem como validada para a base atual 88-16-9.
 
 O boot original analisado é de uma base diferente: `5.4.295-moto-17290-g91c2dab5855a`, compilação do aparelho `V1TCS35H.88-16-9`. SHA-256 do boot enviado: `f214a2339f0914e0d0871012dd5d82bdd546a7cdff5149f25a37f9c95074f0a0`. A imagem tem cabeçalho Android boot v3 e configuração embutida; ela não é usada automaticamente para empacotar o kernel antigo.
 
