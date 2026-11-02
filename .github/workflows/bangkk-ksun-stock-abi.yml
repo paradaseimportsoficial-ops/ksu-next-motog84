@@ -2,9 +2,6 @@ name: Moto G84 - KernelSU stock-config ABI diagnostic
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/bangkk-ksun-stock-abi.yml'
 
 permissions:
   contents: read
@@ -158,6 +155,16 @@ jobs:
           import json, pathlib
           symbols = {p[1]: int(p[0], 16) for line in pathlib.Path('logs/Module.symvers').read_text().splitlines() if (p := line.split())}
           reference = json.loads(pathlib.Path('diagnostics/vendor-88-16-1-crcs.json').read_text())
+          # Exports read from SHN_ABS __crc_* in the supplied mmi_annotate.ko.
+          # That provider must match the kernel before its exports can be used.
+          provider = reference['modules']['lib/modules/mmi_annotate.ko']
+          if any(symbols.get(name) != crc for name, crc in provider.items()):
+              raise SystemExit('mmi_annotate provider is not compatible with the kernel')
+          module_exports = {'mmi_annotate': 0xf3cb0240, 'mmi_annotate_persist': 0x5482805e}
+          for name, crc in module_exports.items():
+              if name in symbols and symbols[name] != crc:
+                  raise SystemExit('Conflicting export: ' + name)
+              symbols[name] = crc
           report = {}
           for module, expected in reference['modules'].items():
               report[module] = {
