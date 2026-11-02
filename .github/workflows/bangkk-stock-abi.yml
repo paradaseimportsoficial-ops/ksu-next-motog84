@@ -1,0 +1,133 @@
+name: Moto G84 - stock ABI diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bangkk-stock-abi.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bangkk-stock-abi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      KERNEL_SHA: 9b862eda32365382ce5beebc8e616db1507eed1e
+      KSU_SHA: b933b1f728116a456fbebf27b6a8772a640cdf23
+      CLANG_SHA: 7e2d7f3e8dba20760df041bf90ca5a15913631c8
+      ARCH: arm64
+      LLVM: '1'
+      LLVM_IAS: '1'
+      CROSS_COMPILE: aarch64-linux-gnu-
+      CROSS_COMPILE_COMPAT: arm-linux-gnueabi-
+      CLANG_TRIPLE: aarch64-linux-gnu-
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev \
+            libncurses5 libncurses-dev python3 rsync curl xz-utils cpio kmod \
+            binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
+          mkdir -p logs dist toolchain
+
+      - name: Fetch pinned Motorola and KernelSU Next sources
+        run: |
+          git clone --depth 1 --branch MMI-V1TCS35H.88-16-1 \
+            https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel
+          test "$(git -C kernel rev-parse HEAD)" = "$KERNEL_SHA"
+          printf 'Motorola tag: MMI-V1TCS35H.88-16-1\nKernel: %s\nKernelSU Next legacy: %s\nClang repository: %s\n' \
+            "$KERNEL_SHA" "$KSU_SHA" "$CLANG_SHA" > logs/sources.txt
+
+      - name: Restore pinned Clang toolchain
+        id: clang-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: toolchain/
+          key: android-clang-r383902b1-${{ env.CLANG_SHA }}
+
+      - name: Download original-generation Android Clang 11
+        if: steps.clang-cache.outputs.cache-hit != 'true'
+        run: |
+          curl --fail --location --retry 3 \
+            "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/$CLANG_SHA/clang-r383902b1.tar.gz" \
+            --output clang.tar.gz
+          sha256sum clang.tar.gz >> logs/sources.txt
+          tar -xzf clang.tar.gz -C toolchain
+          rm clang.tar.gz
+      - name: Save pinned Clang toolchain
+        if: steps.clang-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: toolchain/
+          key: android-clang-r383902b1-${{ env.CLANG_SHA }}
+
+      - name: Activate Clang
+        run: |
+          "$PWD/toolchain/bin/clang" --version | tee logs/compiler.txt
+          echo "$PWD/toolchain/bin" >> "$GITHUB_PATH"
+
+      - name: Configure stock baseline without KernelSU
+        run: |
+          cd kernel
+          mkdir -p out
+          cp ../diagnostics/stock-88-16-1.config out/.config
+          make O=out olddefconfig 2>&1 | tee ../logs/config.log
+          cp out/.config ../logs/kernel.config
+          diff -u ../diagnostics/stock-88-16-1.config out/.config > ../logs/config-diff.txt || test "$?" = 1
+          if grep -qx 'CONFIG_KSU=y' out/.config; then exit 1; fi
+          make -s O=out kernelrelease | tee ../logs/kernelrelease.txt
+
+      - name: Compile unmodified Motorola baseline
+        run: |
+          cd kernel
+          make -j2 O=out Image modules 2>&1 | tee ../logs/kernel-build.log
+          test -s out/Module.symvers
+          cp out/Module.symvers ../logs/
+          git diff --exit-code
+          cp ../diagnostics/vendor-88-16-1-crcs.json ../logs/vendor-reference.json
+
+      - name: Compare per-module CRCs
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          symbols = {p[1]: int(p[0], 16) for line in pathlib.Path('logs/Module.symvers').read_text().splitlines() if (p := line.split())}
+          reference = json.loads(pathlib.Path('diagnostics/vendor-88-16-1-crcs.json').read_text())
+          report = {}
+          for module, expected in reference['modules'].items():
+              report[module] = {
+                  'matches': sum(symbols.get(name) == crc for name, crc in expected.items()),
+                  'mismatches': {name: {'expected': hex(crc), 'built': hex(symbols[name])} for name, crc in expected.items() if name in symbols and symbols[name] != crc},
+                  'missing': [name for name in expected if name not in symbols],
+              }
+          pathlib.Path('logs/abi-report.json').write_text(json.dumps(report, indent=2))
+          summary = ['# Stock baseline ABI diagnostic', '', 'Reference only: no boot or flash package generated. GKI-path modules and Motorola modules are reported separately; loading relevance must be checked.', '']
+          for label, subset in [('GKI-path', [n for n in report if '/5.4-gki/' in n]), ('Motorola', [n for n in report if '/5.4-gki/' not in n])]:
+              affected = sum(bool(report[n]['mismatches']) for n in subset)
+              summary.append(f'{label}: {affected}/{len(subset)} modules have differing CRCs.')
+          text = '\n'.join(summary) + '\n'
+          pathlib.Path('logs/summary.md').write_text(text)
+          print(text)
+          PY
+          cat logs/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bangkk-stock-abi-${{ github.run_number }}
+          path: logs/
+          retention-days: 14
