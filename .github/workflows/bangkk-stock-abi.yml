@@ -19,7 +19,6 @@ jobs:
     timeout-minutes: 120
     env:
       KERNEL_SHA: 9b862eda32365382ce5beebc8e616db1507eed1e
-      KSU_SHA: b933b1f728116a456fbebf27b6a8772a640cdf23
       CLANG_SHA: 7e2d7f3e8dba20760df041bf90ca5a15913631c8
       ARCH: arm64
       LLVM: '1'
@@ -44,13 +43,13 @@ jobs:
             binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
           mkdir -p logs dist toolchain
 
-      - name: Fetch pinned Motorola and KernelSU Next sources
+      - name: Fetch pinned Motorola sources
         run: |
           git clone --depth 1 --branch MMI-V1TCS35H.88-16-1 \
             https://github.com/MotorolaMobilityLLC/kernel-msm.git kernel
           test "$(git -C kernel rev-parse HEAD)" = "$KERNEL_SHA"
-          printf 'Motorola tag: MMI-V1TCS35H.88-16-1\nKernel: %s\nKernelSU Next legacy: %s\nClang repository: %s\n' \
-            "$KERNEL_SHA" "$KSU_SHA" "$CLANG_SHA" > logs/sources.txt
+          printf 'Motorola tag: MMI-V1TCS35H.88-16-1\nKernel: %s\nClang repository: %s\n' \
+            "$KERNEL_SHA" "$CLANG_SHA" > logs/sources.txt
 
       - name: Restore pinned Clang toolchain
         id: clang-cache
@@ -97,6 +96,13 @@ jobs:
           make -j2 O=out Image modules 2>&1 | tee ../logs/kernel-build.log
           test -s out/Module.symvers
           cp out/Module.symvers ../logs/
+          test -s out/arch/arm64/boot/Image
+          cp out/arch/arm64/boot/Image ../logs/Image
+          llvm-nm out/vmlinux > ../logs/baseline-symbols.txt
+          if grep ' ksu_' ../logs/baseline-symbols.txt; then
+            echo 'Unexpected KernelSU symbols in baseline' >&2
+            exit 1
+          fi
           git diff --exit-code
           cp ../diagnostics/vendor-88-16-1-crcs.json ../logs/vendor-reference.json
 
@@ -123,6 +129,11 @@ jobs:
           print(text)
           PY
           cat logs/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Hash baseline build outputs
+        run: |
+          cd logs
+          sha256sum Image Module.symvers kernel.config sources.txt kernelrelease.txt > SHA256SUMS
 
       - name: Upload diagnostic logs
         if: always()
