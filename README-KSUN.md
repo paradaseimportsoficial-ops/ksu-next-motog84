@@ -108,3 +108,12 @@ modules.dep referencia os provedores de touch e rmnet; modules.load principal li
 Foi gerado candidato R3 com ramdisk original da firmware atual V1TCS35H.88-16-9 e o MESMO kernel R2 5.4.284-moto-dirty. Portanto há redução de versão do kernel em relação ao original 5.4.295; não é reconstrução da fonte exata atual. Boot unsigned de 44187648 bytes, SHA256 778857108edac4032107c0d24b49f16662465fc0605402db11a74e7601efdb2b. Pacote MotoG84-KSUN-88-16-9-R3-EXPERIMENTAL.zip, 26083920 bytes, SHA256 2855d4aafa16c23df12c27165bf0e20af99d4601d91d11c5537202c3ab183f12. Ramdisk atual preservado byte a byte (SHA256 5ede7e6d4914c3791ebb678f36180f75da81d1ff6e69fed3b4bee5ec2233fcd7), header preservado exceto kernel_size, Image corresponde ao build corrigido. Round-trip da base e checksums finais verificados. Não inclui endereços de kernel da lista runtime.
 
 R3 é candidato experimental, não instalador TWRP ou imagem validada. Não houve teste de boot/root/hardware, flash ou downgrade. Antes de orientar teste é necessário definir meio de recuperação e verificar suporte à inicialização temporária no aparelho. R1 e R2 não devem ser usados para a firmware atual.
+
+
+## Teste temporário R3 — falha de inicialização
+
+O usuário executou somente fastboot boot com boot-88-16-9-KSUN-5.4.284-R3-UNTESTED.img. O transporte e o comando boot retornaram OKAY, mas o aparelho permaneceu na tela inicial Hello Moto, sem inicializar o Android durante a tentativa relatada. Após reinicialização forçada, o usuário confirmou retorno normal à tela de bloqueio. Não foi relatado flash da imagem.
+
+O diagnóstico pós-reinicialização confirmou kernel instalado 5.4.295-Tecnico-Root-V1 e diretório /sys/fs/pstore vazio. A tentativa alternativa retornou Registro last_kmsg indisponível. Portanto não foi recuperado registro do kernel experimental e a causa do travamento permanece indeterminada. R3 falhou neste teste e não deve ser tratado como imagem instalável ou validada. OKAY do fastboot não comprova inicialização do Android.
+
+Próxima comparação de diagnóstico: avaliar um controle sem KernelSU, com a mesma fonte/configuração/toolchain e o mesmo empacotamento/ramdisk atual, para separar falha da base de falha introduzida pela integração. A build baseline existente pode servir como insumo, mas precisa ser reconferida antes de preparar outro teste temporário. Não solicitar novo flash, downgrade ou repetição do R3 como solução para esta falha.
