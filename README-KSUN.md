@@ -81,3 +81,12 @@ O usuário confirmou que o aparelho permanece em V1TCS35H.88-16-9. O boot origin
 Nova consulta ao repositório oficial: commit 91c2dab5855a não encontrado (API 422); matching-refs para tags MMI-V1TCS35H retorna somente MMI-V1TCS35H.88-16-1. Foi também inspecionada a tag MMI-U1TCS34.22-64-19-4-4, citada em solicitação pública como fonte de um aparelho 5.4.295: o commit eb4e9e3927e1e9943ecc9296dbdaaca351fcd0ba declara SUBLEVEL=274 no Makefile, portanto não foi adotado como fonte exata de 88-16-9.
 
 Pendências para manter firmware atual: obter/identificar fonte compatível e comparar vendor_boot e módulos da própria 88-16-9. O primeiro vendor_boot enviado declarava g d5c26e98f35d (sem o espaço), diferente de g91c2dab5855a, e foi confirmado pelo usuário como sendo de outra versão; o segundo corresponde à base antiga 88-16-1. Nenhuma compilação nova para 88-16-9 foi iniciada sem resolver a base. Não há orientação de downgrade nem solicitação publicada a terceiros.
+
+
+## Vendor boot 88-16-9 confirmado
+
+Novo arquivo recebido: SHA256 fd99e8c6a1949e3681ad09ffb3ff915ff83328ee81bfc1da7fc80f5bafedc00f, 100663296 bytes, cabeçalho v3, página 4096. Todos os 48 módulos declaram vermagic 5.4.295-moto-17290-g91c2dab5855a, exatamente a versão do boot atual recuperado.
+
+Comparação local com Module.symvers da build R2 5.4.284: zero CRCs divergentes nos requisitos de kernel dos três módulos Motorola. mmi_annotate possui 35 requisitos; mmi_info possui 40 símbolos do kernel e dois fornecidos por mmi_annotate; qpnp_adaptive_charge possui 21. Os exports __crc_mmi_annotate=0xf3cb0240 e __crc_mmi_annotate_persist=0x5482805e foram novamente lidos do módulo desta versão e coincidem com os requisitos do consumidor. modules.dep e modules.load também confirmam a dependência e a ordem.
+
+Isso demonstra compatibilidade parcial de CRCs entre estes módulos da firmware atual e R2, não equivalência de kernel, compatibilidade completa de firmware nem autorização técnica para instalar R2. R2 continua com ramdisk 88-16-1 e kernel 5.4.284. Nenhum novo boot foi criado nesta etapa. Para ampliar a verificação, faltam os módulos externos da partição vendor da firmware 88-16-9 (por exemplo o conteúdo de /vendor/lib/modules), além da análise dos device trees/carregamento. A fonte exata 5.4.295 segue não localizada nas consultas realizadas.
