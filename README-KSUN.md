@@ -52,3 +52,12 @@ O vendor_boot recebido posteriormente tem SHA256 `04fcd581c15a5d52bbb2335f39592f
 A comparação das entradas ELF `__versions` desses módulos com o `Module.symvers` da build encontrou CRCs divergentes em todos os 48 módulos. Exemplo: `module_layout` exige `0x1e5b7ab7`, mas a build exporta `0x5661dded`. Portanto este conjunto de módulos não está compatível com a build experimental; não montar um instalador usando esse vendor_boot. Não se corrigiu vermagic nem se desabilitou a checagem de versões. Alguns drivers podem estar embutidos na build; isso não valida os demais módulos externos.
 
 Próximo insumo: vendor_boot extraído do mesmo pacote de firmware V1TCS35H.88-16-1 do boot de base, além dos módulos vendor correspondentes. A versão exata do firmware deste vendor_boot não foi determinada só pelo vermagic. A imagem de engenharia entregue continua sem validação para instalação.
+
+
+## Vendor boot corrigido recebido
+
+O usuário confirmou ter enviado anteriormente um vendor_boot de outra versão e forneceu outro arquivo. SHA256 do novo: `f9ce2c8952486714f3e30afc4a43d90206ad25c40fcd325312a5ae09bf593d42`; tamanho 100663296 bytes; cabeçalho v3; página 4096; ramdisk gzip 731078 bytes.
+
+Os 48 módulos agora declaram exatamente a versão do kernel do boot base: `5.4.284-moto-gef07def7b0a7 SMP preempt mod_unload modversions aarch64`. Isso resolve a divergência de versão do insumo anterior, mas não a ABI da compilação experimental: a comparação das seções ELF __versions com o Module.symvers da build ainda aponta CRCs divergentes em todos os 48 módulos; um módulo também requer símbolos não presentes nesse Module.symvers. Exemplo verificado em _qcom_scm.ko: module_layout `0x1e5b7ab7` versus build `0x5661dded`; of_find_property `0x03d022de` versus build `0x43bd736f`.
+
+A revisão do patch gerado confirma que a integração KSU acrescenta atomic_t filter_count a struct seccomp em include/linux/seccomp.h. Esta é uma alteração relevante a investigar junto às diferenças VDSO/configuração/fonte; a causa individual dos CRCs divergentes ainda não foi isolada. Não contornar o problema alterando apenas strings vermagic ou CRCs. Próxima etapa técnica: reproduzir e comparar uma build sem KSU e com a configuração original, para separar diferenças da base/toolchain das introduzidas pela integração. Depois ajustar/recompilar os módulos necessários ou preservar a ABI de forma comprovada. O novo vendor_boot não foi modificado, e nenhum pacote de instalação foi gerado a partir dele.
