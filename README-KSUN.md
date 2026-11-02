@@ -72,3 +72,12 @@ A análise local do vendor_boot correto confirmou os exports ELF absolutos de mm
 Foi gerado localmente boot v3 unsigned R2, preservando integralmente o ramdisk 88-16-1 e o cabeçalho exceto kernel_size. Kernel 5.4.284-moto-dirty; SHA256 do boot: 2a987b08df6a59e7388bf8d7cdf4cedcf21b17932dd21d59ee4f9286e77d105c. Pacote MotoG84-KSUN-88-16-1-R2-EXPERIMENTAL.zip, 26329860 bytes, SHA256 4df10b352a164cf2a8be1369a56e13588b73e417bfff91e9c14b196686e674c3. Digest do artefato GitHub foi conferido antes do empacotamento; os hashes internos do ZIP final também passaram.
 
 A verificação acima é parcial: não demonstra boot, root, funcionamento do Manager, DTBO nem compatibilidade de todos os módulos vendor. Os 45 módulos no diretório 5.4-gki continuam divergentes como na referência sem KSU, e seu uso no aparelho precisa ser confirmado. Firmware atual informada anteriormente era 88-16-9; R2 não é validado para ela. ZIP não é instalador TWRP. Nenhum flash/downgrade foi feito.
+
+
+## Alvo confirmado: manter firmware 88-16-9
+
+O usuário confirmou que o aparelho permanece em V1TCS35H.88-16-9. O boot original foi recuperado e reconferido: SHA256 f214a2339f0914e0d0871012dd5d82bdd546a7cdff5149f25a37f9c95074f0a0, Linux 5.4.295-moto-17290-g91c2dab5855a, Clang 11.0.2 r383902b1. R2/5.4.284 não foi promovido a candidato validado para esse sistema.
+
+Nova consulta ao repositório oficial: commit 91c2dab5855a não encontrado (API 422); matching-refs para tags MMI-V1TCS35H retorna somente MMI-V1TCS35H.88-16-1. Foi também inspecionada a tag MMI-U1TCS34.22-64-19-4-4, citada em solicitação pública como fonte de um aparelho 5.4.295: o commit eb4e9e3927e1e9943ecc9296dbdaaca351fcd0ba declara SUBLEVEL=274 no Makefile, portanto não foi adotado como fonte exata de 88-16-9.
+
+Pendências para manter firmware atual: obter/identificar fonte compatível e comparar vendor_boot e módulos da própria 88-16-9. O primeiro vendor_boot enviado declarava g d5c26e98f35d (sem o espaço), diferente de g91c2dab5855a, e foi confirmado pelo usuário como sendo de outra versão; o segundo corresponde à base antiga 88-16-1. Nenhuma compilação nova para 88-16-9 foi iniciada sem resolver a base. Não há orientação de downgrade nem solicitação publicada a terceiros.
