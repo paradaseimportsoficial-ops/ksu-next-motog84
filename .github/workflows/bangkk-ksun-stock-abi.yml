@@ -93,6 +93,170 @@ jobs:
           printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
           printf '\nsource "drivers/kernelsu/Kconfig"\n' >> drivers/Kconfig
 
+      - name: Preserve stock seccomp ABI on this pinned 5.4 tree
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+          root = pathlib.Path('kernel')
+          implementation = (root / 'kernel/seccomp.c').read_text()
+          header = (root / 'include/linux/seccomp.h').read_text()
+          if 'put_seccomp_filter' not in implementation or 'seccomp_filter_release' in implementation or 'filter_count' in header:
+              raise SystemExit('Unexpected seccomp API; refusing this target-specific patch')
+          makefile = (root / 'Makefile').read_text()
+          if not re.search(r'^VERSION = 5
+        run: |
+          cd kernel
+          mkdir -p out
+          cp ../diagnostics/stock-88-16-1.config out/.config
+          scripts/config --file out/.config -e KSU -d KSU_MANUAL_HOOK -d KSU_KPROBES_HOOK -e KSU_SYSCALL_TABLE_HOOK
+          make O=out olddefconfig 2>&1 | tee ../logs/config.log
+          cp out/.config ../logs/kernel.config
+          diff -u ../diagnostics/stock-88-16-1.config out/.config > ../logs/config-diff.txt || test "$?" = 1
+          grep -qx 'CONFIG_KSU=y' out/.config
+          grep -qx 'CONFIG_KSU_SYSCALL_TABLE_HOOK=y' out/.config
+          make -s O=out kernelrelease | tee ../logs/kernelrelease.txt
+
+      - name: Prepare SELinux headers and check KernelSU
+        run: |
+          cd kernel
+          make O=out headers_install 2>&1 | tee ../logs/headers.log
+          make -j2 O=out security/selinux/ 2>&1 | tee ../logs/selinux-build.log
+          make -j2 O=out drivers/kernelsu/ 2>&1 | tee ../logs/ksun-build.log
+
+      - name: Compile Motorola kernel with KernelSU
+        run: |
+          cd kernel
+          make -j2 O=out Image modules 2>&1 | tee ../logs/kernel-build.log
+          test -s out/Module.symvers
+          cp out/Module.symvers ../logs/
+          git diff --binary > ../logs/kernel-integration.patch
+          git diff --exit-code -- include/linux/seccomp.h
+          git -C KernelSU-Next diff --binary > ../logs/ksun-compatibility.patch
+          cp include/linux/seccomp.h ../logs/seccomp.h
+          cp out/arch/arm64/boot/Image ../logs/Image
+          llvm-nm out/vmlinux | grep ' ksu_' > ../logs/ksu-symbols.txt
+          cp ../diagnostics/vendor-88-16-1-crcs.json ../logs/vendor-reference.json
+
+      - name: Compare per-module CRCs
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          symbols = {p[1]: int(p[0], 16) for line in pathlib.Path('logs/Module.symvers').read_text().splitlines() if (p := line.split())}
+          reference = json.loads(pathlib.Path('diagnostics/vendor-88-16-1-crcs.json').read_text())
+          report = {}
+          for module, expected in reference['modules'].items():
+              report[module] = {
+                  'matches': sum(symbols.get(name) == crc for name, crc in expected.items()),
+                  'mismatches': {name: {'expected': hex(crc), 'built': hex(symbols[name])} for name, crc in expected.items() if name in symbols and symbols[name] != crc},
+                  'missing': [name for name in expected if name not in symbols],
+              }
+          pathlib.Path('logs/abi-report.json').write_text(json.dumps(report, indent=2))
+          summary = ['# KernelSU with original boot configuration ABI diagnostic', '', 'Reference only: no boot or flash package generated. GKI-path modules and Motorola modules are reported separately; loading relevance must be checked.', '']
+          for label, subset in [('GKI-path', [n for n in report if '/5.4-gki/' in n]), ('Motorola', [n for n in report if '/5.4-gki/' not in n])]:
+              affected = sum(bool(report[n]['mismatches']) for n in subset)
+              summary.append(f'{label}: {affected}/{len(subset)} modules have differing CRCs.')
+          text = '\n'.join(summary) + '\n'
+          pathlib.Path('logs/summary.md').write_text(text)
+          print(text)
+          PY
+          cat logs/summary.md >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY'
+          import json, pathlib
+          report = json.loads(pathlib.Path('logs/abi-report.json').read_text())
+          motorola = {name: data for name, data in report.items() if '/5.4-gki/' not in name}
+          assert len(motorola) == 3, 'Unexpected Motorola module inventory'
+          bad = [name for name, data in motorola.items() if data['mismatches'] or data['missing']]
+          if bad:
+              raise SystemExit('Motorola module ABI check failed: ' + ', '.join(bad))
+          print('All required CRCs for the three supplied Motorola modules match.')
+          PY
+
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bangkk-ksun-stock-abi-${{ github.run_number }}
+          path: logs/
+          retention-days: 14
+, makefile, re.M) or not re.search(r'^PATCHLEVEL = 4
+        run: |
+          cd kernel
+          mkdir -p out
+          cp ../diagnostics/stock-88-16-1.config out/.config
+          scripts/config --file out/.config -e KSU -d KSU_MANUAL_HOOK -d KSU_KPROBES_HOOK -e KSU_SYSCALL_TABLE_HOOK
+          make O=out olddefconfig 2>&1 | tee ../logs/config.log
+          cp out/.config ../logs/kernel.config
+          diff -u ../diagnostics/stock-88-16-1.config out/.config > ../logs/config-diff.txt || test "$?" = 1
+          grep -qx 'CONFIG_KSU=y' out/.config
+          grep -qx 'CONFIG_KSU_SYSCALL_TABLE_HOOK=y' out/.config
+          make -s O=out kernelrelease | tee ../logs/kernelrelease.txt
+
+      - name: Prepare SELinux headers and check KernelSU
+        run: |
+          cd kernel
+          make O=out headers_install 2>&1 | tee ../logs/headers.log
+          make -j2 O=out security/selinux/ 2>&1 | tee ../logs/selinux-build.log
+          make -j2 O=out drivers/kernelsu/ 2>&1 | tee ../logs/ksun-build.log
+
+      - name: Compile Motorola kernel with KernelSU
+        run: |
+          cd kernel
+          make -j2 O=out Image modules 2>&1 | tee ../logs/kernel-build.log
+          test -s out/Module.symvers
+          cp out/Module.symvers ../logs/
+          git diff --binary > ../logs/kernel-integration.patch
+          cp include/linux/seccomp.h ../logs/seccomp.h
+          cp out/arch/arm64/boot/Image ../logs/Image
+          llvm-nm out/vmlinux | grep ' ksu_' > ../logs/ksu-symbols.txt
+          cp ../diagnostics/vendor-88-16-1-crcs.json ../logs/vendor-reference.json
+
+      - name: Compare per-module CRCs
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          symbols = {p[1]: int(p[0], 16) for line in pathlib.Path('logs/Module.symvers').read_text().splitlines() if (p := line.split())}
+          reference = json.loads(pathlib.Path('diagnostics/vendor-88-16-1-crcs.json').read_text())
+          report = {}
+          for module, expected in reference['modules'].items():
+              report[module] = {
+                  'matches': sum(symbols.get(name) == crc for name, crc in expected.items()),
+                  'mismatches': {name: {'expected': hex(crc), 'built': hex(symbols[name])} for name, crc in expected.items() if name in symbols and symbols[name] != crc},
+                  'missing': [name for name in expected if name not in symbols],
+              }
+          pathlib.Path('logs/abi-report.json').write_text(json.dumps(report, indent=2))
+          summary = ['# KernelSU with original boot configuration ABI diagnostic', '', 'Reference only: no boot or flash package generated. GKI-path modules and Motorola modules are reported separately; loading relevance must be checked.', '']
+          for label, subset in [('GKI-path', [n for n in report if '/5.4-gki/' in n]), ('Motorola', [n for n in report if '/5.4-gki/' not in n])]:
+              affected = sum(bool(report[n]['mismatches']) for n in subset)
+              summary.append(f'{label}: {affected}/{len(subset)} modules have differing CRCs.')
+          text = '\n'.join(summary) + '\n'
+          pathlib.Path('logs/summary.md').write_text(text)
+          print(text)
+          PY
+          cat logs/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bangkk-ksun-stock-abi-${{ github.run_number }}
+          path: logs/
+          retention-days: 14
+, makefile, re.M):
+              raise SystemExit('Only the pinned 5.4 target is supported')
+          path = root / 'KernelSU-Next/kernel/Kbuild'
+          text = path.read_text()
+          start = text.index('ifneq ($(shell grep -q "atomic_t filter_count;"')
+          end = text.index('\nendif', start) + len('\nendif')
+          block = text[start:end]
+          if block.count('$(shell sed -i') != 2 or 'patching struct seccomp' not in block:
+              raise SystemExit('Unexpected Kbuild patch block')
+          # This kernel uses the existing put_seccomp_filter branch in app_profile.c.
+          # Its conditional filter_count access is excluded; no new field is needed.
+          text = text[:start] + '# Moto 5.4: preserve the original seccomp structure; use existing legacy API.\n' + text[end:]
+          path.write_text(text)
+          print('Removed unnecessary struct seccomp mutation for pinned Motorola 5.4')
+          PY
+
       - name: Configure original boot settings plus KernelSU
         run: |
           cd kernel
