@@ -49,6 +49,19 @@ jobs:
           printf 'Motorola tag: MMI-V1TCS35H.88-16-1\nKernel: %s\nKernelSU Next legacy: %s\nClang repository: %s\n' \
             "$KERNEL_SHA" "$KSU_SHA" "$CLANG_SHA" > logs/sources.txt
 
+      - name: Fetch Motorola built-in techpacks for bangkk
+        run: |
+          fetch_pack() {
+            local directory="$1" repository="$2" revision="$3"
+            git clone --depth 1 --branch MMI-V1TCS35H.88-16-1 \
+              "https://github.com/MotorolaMobilityLLC/$repository.git" "kernel/techpack/$directory"
+            test "$(git -C "kernel/techpack/$directory" rev-parse HEAD)" = "$revision"
+            printf '%s %s\n' "$repository" "$revision" >> logs/sources.txt
+          }
+          fetch_pack display kernel-msm-5.4-techpack-display 760ad20d37ae0e7dc14dcab0aec76587804f4064
+          fetch_pack video kernel-msm-5.4-techpack-video 07570bbeb5fa9f7874a2868681657fba9ed77bd9
+          fetch_pack dataipa kernel-msm-techpack-dataipa 013bc7805c53e23e7585d2a594b15275c726ee29
+
       - name: Restore pinned Clang toolchain
         id: clang-cache
         uses: actions/cache/restore@v4
@@ -192,6 +205,19 @@ jobs:
               raise SystemExit('Motorola module ABI check failed: ' + ', '.join(bad))
           print('All required CRCs for the three supplied Motorola modules match.')
           PY
+
+      - name: Verify built-in stock drivers and hash build outputs
+        run: |
+          cd logs
+          python3 - <<'PY'
+          from pathlib import Path
+          image = Path("Image").read_bytes()
+          probes = ["techpack/display/msm/dsi/dsi_panel.c", "techpack/video/msm/vidc/msm_v4l2_vidc.c", "techpack/dataipa/drivers/platform/msm/gsi/gsi.c"]
+          for probe in probes:
+              if probe.encode() not in image:
+                  raise SystemExit(f"Stock driver marker missing from Image: {probe}")
+          PY
+          sha256sum Image Module.symvers kernel.config sources.txt kernelrelease.txt > SHA256SUMS
 
       - name: Upload diagnostic logs
         if: always()
