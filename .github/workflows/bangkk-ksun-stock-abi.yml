@@ -132,6 +132,27 @@ jobs:
           print('Removed unnecessary seccomp mutation for pinned Motorola 5.4')
           PY
 
+      - name: Fix ARM64 block address translation for R8
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          path = pathlib.Path('kernel/KernelSU-Next/kernel/hook/patch_memory.c')
+          text = path.read_text()
+          arm64, x86 = text.split('#elif defined(__x86_64__)', 1)
+          header = pathlib.Path('kernel/arch/arm64/include/asm/pgtable.h').read_text()
+          if '#define pmd_sect(pmd)' not in header or '#define pud_bad(pud)' not in header:
+              raise SystemExit('Unexpected Motorola page-table API')
+          patches = json.loads("[{\"old\":\"    if (pud_none(*pud) || pud_bad(*pud))\\n        goto fail;\\n    pr_debug(\\\"pud of 0x%lx p=0x%lx v=0x%lx\\\", addr, (uintptr_t)pud,\\n             (uintptr_t)pud_val(*pud));\\n#if defined(pud_leaf)\\n    if (pud_leaf(*pud)) {\\n        pr_debug(\\\"Address 0x%lx maps to a PUD-level huge page\\\\n\\\", addr);\\n        return __pud_to_phys(*pud) + ((addr & ~PUD_MASK));\\n    }\\n#endif\",\"new\":\"    if (pud_none(*pud))\\n        goto fail;\\n    /* Motorola 5.4 uses pud_sect(), not pud_leaf(). A valid block\\n     * must be handled before pud_bad(), which expects a table. */\\n    if (pud_sect(*pud))\\n        return (__pud_to_phys(*pud) & PUD_MASK) | (addr & ~PUD_MASK);\\n    if (pud_bad(*pud))\\n        goto fail;\"},{\"old\":\"#if defined(pmd_leaf)\\n    if (pmd_leaf(*pmd)) {\\n        pr_debug(\\\"Address 0x%lx maps to a PMD-level huge page\\\\n\\\", addr);\\n        return __pmd_to_phys(*pmd) + ((addr & ~PMD_MASK));\\n    }\\n#endif\",\"new\":\"    /* Motorola 5.4 names PMD block descriptors pmd_sect(). */\\n    if (pmd_sect(*pmd))\\n        return (__pmd_to_phys(*pmd) & PMD_MASK) | (addr & ~PMD_MASK);\"}]")
+          for patch in patches:
+              if arm64.count(patch['old']) != 1:
+                  raise SystemExit('Unexpected legacy ARM64 walker; refusing patch')
+              arm64 = arm64.replace(patch['old'], patch['new'], 1)
+          assert arm64.index('if (pud_sect(*pud))') < arm64.index('if (pud_bad(*pud))')
+          assert arm64.index('if (pmd_sect(*pmd))') < arm64.index('if (pmd_none(*pmd) || pmd_bad(*pmd))')
+          path.write_text(arm64 + '#elif defined(__x86_64__)' + x86)
+          print('R8: handle Motorola ARM64 PUD/PMD block mappings before table validation')
+          PY
+
       - name: Connect legacy boot and manager hooks for R7
         run: |
           python3 - <<'PY'
