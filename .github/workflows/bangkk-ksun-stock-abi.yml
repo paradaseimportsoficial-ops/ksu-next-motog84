@@ -2,6 +2,9 @@ name: Moto G84 - KernelSU stock-config ABI diagnostic
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bangkk-ksun-stock-abi.yml'
 
 permissions:
   contents: read
@@ -18,6 +21,7 @@ jobs:
       KERNEL_SHA: 9b862eda32365382ce5beebc8e616db1507eed1e
       KSU_SHA: b933b1f728116a456fbebf27b6a8772a640cdf23
       CLANG_SHA: 7e2d7f3e8dba20760df041bf90ca5a15913631c8
+      LOCALVERSION: ''
       ARCH: arm64
       LLVM: '1'
       LLVM_IAS: '1'
@@ -134,12 +138,14 @@ jobs:
           mkdir -p out
           cp ../diagnostics/stock-88-16-1.config out/.config
           scripts/config --file out/.config -e KSU -d KSU_MANUAL_HOOK -d KSU_KPROBES_HOOK -e KSU_SYSCALL_TABLE_HOOK
+          scripts/config --file out/.config --set-str LOCALVERSION '-Tecnico-Root-V1' -d LOCALVERSION_AUTO
           make O=out olddefconfig 2>&1 | tee ../logs/config.log
           cp out/.config ../logs/kernel.config
           diff -u ../diagnostics/stock-88-16-1.config out/.config > ../logs/config-diff.txt || test "$?" = 1
           grep -qx 'CONFIG_KSU=y' out/.config
           grep -qx 'CONFIG_KSU_SYSCALL_TABLE_HOOK=y' out/.config
           make -s O=out kernelrelease | tee ../logs/kernelrelease.txt
+          grep -qx '5.4.284-Tecnico-Root-V1' ../logs/kernelrelease.txt
 
       - name: Prepare SELinux headers and check KernelSU
         run: |
